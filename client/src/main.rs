@@ -13,7 +13,6 @@ mod security;
 mod settings;
 mod vnc;
 
-pub use crate::framebuffer::image::ReadonlyPixmap;
 use crate::framebuffer::{Framebuffer, KoboFramebuffer1, KoboFramebuffer2, Pixmap, UpdateMode};
 use crate::geom::Rectangle;
 use crate::vnc::{client, Client, Encoding, Rect};
@@ -29,6 +28,19 @@ use anyhow::{Context as ResultExt, Error};
 use crate::device::CURRENT_DEVICE;
 
 const FB_DEVICE: &str = "/dev/fb0";
+
+const SD_COLOR_FORMAT: PixelFormat = PixelFormat {
+    bits_per_pixel: 8,
+    depth: 16,
+    big_endian: false,
+    true_colour: true,
+    red_max: 255,
+    green_max: 255,
+    blue_max: 255,
+    red_shift: 16,
+    green_shift: 8,
+    blue_shift: 0,
+};
 
 #[repr(align(256))]
 pub struct PostProcBin {
@@ -85,12 +97,7 @@ fn main() -> Result<(), Error> {
                 .help("apply a post processing filter to turn colors greater than the specified value to white (255)")
                 .long("whitecutoff")
                 .takes_value(true),
-        ).arg(
-            Arg::with_name("ROTATE")
-                .help("rotation (1-4), tested on a Clara HD, try at own risk")
-                .long("rotate")
-                .takes_value(true),
-        ) 
+        )
         .get_matches();
 
     let host = matches.value_of("HOST").unwrap();
@@ -101,7 +108,6 @@ fn main() -> Result<(), Error> {
     let contrast_gray_point = value_t!(matches.value_of("GRAYPOINT"), f32).unwrap_or(224.0);
     let white_cutoff = value_t!(matches.value_of("WHITECUTOFF"), u8).unwrap_or(255);
     let exclusive = matches.is_present("EXCLUSIVE");
-    let rotate = value_t!(matches.value_of("ROTATE"), i8).unwrap_or(1);
 
     info!("connecting to {}:{}", host, port);
     let stream = match std::net::TcpStream::connect((host, port)) {
@@ -163,6 +169,9 @@ fn main() -> Result<(), Error> {
     let vnc_format = vnc.format();
     info!("received {:?}", vnc_format);
 
+    vnc.set_format(SD_COLOR_FORMAT).unwrap();
+    info!("enforced {:?}", SD_COLOR_FORMAT);
+
     vnc.set_encodings(&[Encoding::CopyRect, Encoding::Zrle])
         .unwrap();
 
@@ -175,17 +184,9 @@ fn main() -> Result<(), Error> {
         },
         false,
     )
-    .unwrap();
+        .unwrap();
 
     #[cfg(feature = "eink_device")]
-    debug!(
-        "running on device model=\"{}\" /dpi={} /dims={}x{}", 
-        CURRENT_DEVICE.model,
-        CURRENT_DEVICE.dpi,
-        CURRENT_DEVICE.dims.0,
-        CURRENT_DEVICE.dims.1
-    );
-
     let mut fb: Box<dyn Framebuffer> = if CURRENT_DEVICE.mark() != 8 {
         Box::new(
             KoboFramebuffer1::new(FB_DEVICE)
@@ -202,7 +203,7 @@ fn main() -> Result<(), Error> {
 
     #[cfg(feature = "eink_device")]
     {
-        let startup_rotation = rotate;
+        let startup_rotation = 3;
         fb.set_rotation(startup_rotation).ok();
     }
 
@@ -252,10 +253,10 @@ fn main() -> Result<(), Error> {
 
     let fb_rect = rect![0, 0, width as i32, height as i32];
 
-    let post_proc_enabled = contrast_exp != 1.0;
-
     'running: loop {
         let time_at_sol = Instant::now();
+        let mut frame_complete = false;
+        let current_format = vnc.format();
 
         for event in vnc.poll_iter() {
             use client::Event;
@@ -272,27 +273,28 @@ fn main() -> Result<(), Error> {
                     let elapsed_ms = time_at_sol.elapsed().as_millis();
                     debug!("network Δt: {}", elapsed_ms);
 
-                    let scale_down = 
+                    // Single pass: convert to grayscale + apply post-processing LUT.
+                    // Use the current negotiated format (may have changed via set_format).
+                    let bpp = current_format.bits_per_pixel as usize / 8;
+                    let gray_pixels: Vec<u8> = if bpp >= 3 {
+                        // 32bpp or 24bpp: compute luminance from RGB channels.
+                        // Server bytes: [R, G, B, ...] (red_shift=0, green_shift=8, blue_shift=16)
                         pixels
-                            .iter()
-                            .step_by(4)
-                            .map(|&c| post_proc_bin.data[c as usize])
-                            .collect();
-
-                    let post_proc_pixels = if post_proc_enabled {
-                        pixels
-                            .iter()
-                            .step_by(4)
-                            .map(|&c| post_proc_bin.data[c as usize])
+                            .chunks_exact(bpp)
+                            .map(|p| {
+                                let luma = (p[0] as u32 * 299
+                                    + p[1] as u32 * 587
+                                    + p[2] as u32 * 114)
+                                    / 1000;
+                                post_proc_bin.data[luma as usize]
+                            })
                             .collect()
                     } else {
-                        Vec::new()
-                    };
-
-                    let pixels = if post_proc_enabled {
-                        &post_proc_pixels
-                    } else {
-                        &scale_down
+                        // 8bpp: each byte is already a single-channel value, apply LUT directly.
+                        pixels
+                            .iter()
+                            .map(|&c| post_proc_bin.data[c as usize])
+                            .collect()
                     };
 
                     let w = vnc_rect.width as u32;
@@ -300,26 +302,12 @@ fn main() -> Result<(), Error> {
                     let l = vnc_rect.left as u32;
                     let t = vnc_rect.top as u32;
 
-                    let pixmap = ReadonlyPixmap {
-                        width: w as u32,
-                        height: h as u32,
-                        data: pixels,
-                    };
-                    debug!("Put pixels {} {} {} size {}",w,h,w*h,pixels.len());
-
                     let elapsed_ms = time_at_sol.elapsed().as_millis();
                     debug!("postproc Δt: {}", elapsed_ms);
 
                     #[cfg(feature = "eink_device")]
                     {
-                        for y in 0..pixmap.height {
-                            for x in 0..pixmap.width {
-                                let px = x + l;
-                                let py = y + t;
-                                let color = pixmap.get_pixel(x, y);
-                                fb.set_pixel(px, py, color);
-                            }
-                        }
+                        fb.draw_gray_tile(l, t, w, h, &gray_pixels);
                     }
 
                     let elapsed_ms = time_at_sol.elapsed().as_millis();
@@ -428,9 +416,21 @@ fn main() -> Result<(), Error> {
                     }
 
                     dirty_rects.clear();
+
+                    frame_complete = true;
                 }
                 // x => info!("{:?}", x), /* ignore unsupported events */
                 _ => (),
+            }
+        }
+
+        if frame_complete {
+            if vnc.request_update(
+                Rect { left: 0, top: 0, width, height },
+                true,
+            ).is_err() {
+                error!("server disconnected");
+                break;
             }
         }
 
@@ -457,17 +457,6 @@ fn main() -> Result<(), Error> {
                 time_at_sol.elapsed().as_millis() as u64 - FRAME_MS
             );
         }
-
-        vnc.request_update(
-            Rect {
-                left: 0,
-                top: 0,
-                width,
-                height,
-            },
-            true,
-        )
-        .unwrap();
     }
 
     Ok(())
