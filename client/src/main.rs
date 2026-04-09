@@ -97,6 +97,11 @@ fn main() -> Result<(), Error> {
                 .help("apply a post processing filter to turn colors greater than the specified value to white (255)")
                 .long("whitecutoff")
                 .takes_value(true),
+        ).arg(
+        Arg::with_name("ROTATE")
+            .help("rotation (1-4), tested on a Clara HD, try at own risk")
+            .long("rotate")
+            .takes_value(true),
         )
         .get_matches();
 
@@ -108,6 +113,7 @@ fn main() -> Result<(), Error> {
     let contrast_gray_point = value_t!(matches.value_of("GRAYPOINT"), f32).unwrap_or(224.0);
     let white_cutoff = value_t!(matches.value_of("WHITECUTOFF"), u8).unwrap_or(255);
     let exclusive = matches.is_present("EXCLUSIVE");
+    let rotate = value_t!(matches.value_of("ROTATE"), i8).unwrap_or(CURRENT_DEVICE.startup_rotation());
 
     info!("connecting to {}:{}", host, port);
     let stream = match std::net::TcpStream::connect((host, port)) {
@@ -187,6 +193,15 @@ fn main() -> Result<(), Error> {
         .unwrap();
 
     #[cfg(feature = "eink_device")]
+    debug!(
+        "running on device model=\"{}\" /dpi={} /dims={}x{}",
+        CURRENT_DEVICE.model,
+        CURRENT_DEVICE.dpi,
+        CURRENT_DEVICE.dims.0,
+        CURRENT_DEVICE.dims.1
+    );
+    
+    #[cfg(feature = "eink_device")]
     let mut fb: Box<dyn Framebuffer> = if CURRENT_DEVICE.mark() != 8 {
         Box::new(
             KoboFramebuffer1::new(FB_DEVICE)
@@ -203,7 +218,7 @@ fn main() -> Result<(), Error> {
 
     #[cfg(feature = "eink_device")]
     {
-        let startup_rotation = 3;
+        let startup_rotation = rotate;
         fb.set_rotation(startup_rotation).ok();
     }
 
