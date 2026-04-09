@@ -37,6 +37,111 @@ For example:
 ```
 
 For faster framerates, use USB networking (see https://www.mobileread.com/forums/showthread.php?t=254214).
+From noobyme:
+I have fixed ZRLE DroidVNC issues using claude AI. I have changed rotation default to use plato's function to see which value to use. I have added a contingency device detection using /mnt/onboard/.kobo/version instead of using environment variables because ssh does not pass those values. 
+
+Rotate to landscape display using flag --rotate 2. Your device landscape number might be different
+Use resolution smaller than or exactly equal to your display. eg common resolution of 1024x768 will fail to work correctly on Kobo Nia because 1024x758 is the maximum. Custom resolution of 1024x758 works!
+To stop all other programs use this command before launching eink-vnc, thanks koreader startup script.
+killall -q -TERM nickel hindenburg sickel fickel strickel fontickel adobehost foxitpdf iink dhcpcd-dbus dhcpcd bluealsa bluetoothd fmon nanoclock.lua
+
+Compilation instructions
+
+To compile on wsl ubuntu noble 24.04, x86_64 CPU
+1 Go to linux user home directory
+2 Clone repository
+3 Download linaro cross toolchain file (the toolchain itself will do no need for sys root file)
+We want gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf.tar.xz
+4 Extract toolchain
+5
+
+cd /home/noobyme
+git clone https://github.com/everydayanchovies/eink-vnc
+wget https://releases.linaro.org/components/toolchain/binaries/4.9-2017.01/arm-linux-gnueabihf/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf.tar.xz
+tar -xf gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf.tar.xz
+cd /eink-vnc/client/
+mkdir .cargo
+nano .cargo/config.toml
+
+[target.armv7-unknown-linux-gnueabihf]
+linker = "/home/noobyme/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-gcc"
+
+sudo apt-get install rustup
+rustup target add armv7-unknown-linux-gnueabihf
+cargo build --target armv7-unknown-linux-gnueabihf
+
+Done
+
+The first time round I was got an error for these libraries, but seems unneeded,  looks like it was because I had this in the config.
+rustflags = [
+"-C", "link-arg=--sysroot=/home/noobyme/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf/arm-linux-gnueabihf/libc",
+]
+if you run into that, extra steps to fix above error:
+
+sudo dpkg --add-architecture armhf
+sudo add-apt-repository multiverse
+sudo add-apt-repository universe
+sudo nano /etc/apt/sources.list.d/ubuntu.sources
+
+Types: deb
+URIs: http://archive.ubuntu.com/ubuntu/
+Suites: noble noble-updates noble-backports
+Components: main universe restricted multiverse
+Architectures: amd64
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+Types: deb
+URIs: http://security.ubuntu.com/ubuntu/
+Suites: noble-security
+Components: main universe restricted multiverse
+Architectures: amd64
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+Types: deb
+URIs: http://ports.ubuntu.com/ubuntu-ports/
+Suites: noble noble-updates noble-backports noble-security
+Components: main restricted universe multiverse
+Architectures: armhf
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+sudo apt update
+sudo apt-get install libz-dev:armhf libbz2-dev:armhf libjpeg-dev:armhf libpng16-dev:armhf libgumbo-dev:armhf libopenjp2-dev:armhf libjbig2dec-dev:armhf
+
+cd /usr/lib/arm-linux-gnueabihf
+cp libz.* libbz2.* libjpeg.* libpng16.* libgumbo.* libopenjp2.* libjbig2dec.* /home/noobyme/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf/arm-linux-gnueabihf/libc/lib
+
+Note:Copy and pasted commands from AI can fail because formatting differences
+Use AI to help, thats how I successfully compiled it.
+https://www.mobileread.com/forums/showthread.php?t=348481&page=2 Thanks elinkser
+Failed to fill whole buffer? Tightvnc server side blocked ip
+
+Eh, i didnt realise theres an easier way, using docker, from chatgpt
+Ubuntu 24.04, non WSL
+
+sudo apt update
+sudo apt upgrade -y
+sudo apt install -y apt-transport-https ca-certificates curl software-properties-common lsb-release gnupg
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+echo
+"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg]
+https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" |
+sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo systemctl start docker
+sudo systemctl enable docker
+sudo usermod -aG docker $USER (then log out and log in)
+docker --version
+docker run hello-world
+docker pull ewpratten/kobo-cross-armhf:latest
+sudo apt-get install cargo
+sudo apt-get install rustup
+rustup default stable
+cargo install cross
+echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+cd /eink-vnc/client
+cross build --target arm-unknown-linux-musleabihf --release
 
 ## Derivatives
 
