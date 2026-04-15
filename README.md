@@ -1,44 +1,7 @@
 # eInk VNC
 
-A lightweight CLI (command line interface) tool to view a remote screen over VNC, designed to work on eInk screens.
-For now, you can only view, so you'll have to connect a keyboard to the serving computer, or find some other way to interact with it.
-
-This tool has been confirmed to work on several Kobo devices, such as the Kobo Libra 2 and Elipsa2E.
-It was optimized for text based workflows (document reading and writing), doing that it achieves a framerate of 30 fps.
-
-As VNC server we tested successfuly with TightVNC, x11vnc and TigerVNC.
-
-
-## Warning
-
-The screen can refresh up to 30 times per second, this will degrade the eInk display rapidly.
-Do not use with fast changing content like videos.
-
-Furthermore, this tool was only tested on Kobo Libra 2 and Kobo Elipsa 2E.
-**It is possible that it will damage yours.**
-*I cannot be held responsible, use this tool at your own risk.*
-
-[einkvnc_demo_kobo_rotated.webm](https://user-images.githubusercontent.com/4356678/184497681-683af36b-e226-47fc-8993-34a5b356edba.webm)
-
-## Usage
-
-You can use this tool by connecting to the eInk device through SSH, or using menu launchers on the device itself.
-
-To connect to a VNC server:
-
-``` shell
-./einkvnc [IP_ADDRESS] [PORT] [OPTIONS]
-```
-
-For example:
-
-``` shell
-./einkvnc 192.168.2.1 5902 --password abcdefg123 --contrast 2 
-```
-
-For faster framerates, use USB networking (see https://www.mobileread.com/forums/showthread.php?t=254214).
 From noobyme:
-I have fixed ZRLE DroidVNC issues using claude AI. I have changed rotation default to use plato's function to see which value to use. I have added a contingency device detection using /mnt/onboard/.kobo/version instead of using environment variables because ssh does not pass those values. 
+I have fixed ZRLE DroidVNC issues using claude AI. I have changed rotation default to use plato's function to see which value to use. I have added a contingency device detection using /mnt/onboard/.kobo/version instead of using environment variables because ssh does not pass those values. I have also added touchscreen functionality from plato input.rs
 
 Rotate to landscape display using flag --rotate 2. Your device landscape number might be different
 Use resolution smaller than or exactly equal to your display. eg common resolution of 1024x768 will fail to work correctly on Kobo Nia because 1024x758 is the maximum. Custom resolution of 1024x758 works!
@@ -142,6 +105,44 @@ echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 cd /eink-vnc/client
 cross build --target arm-unknown-linux-musleabihf --release
+
+A lightweight CLI (command line interface) tool to view a remote screen over VNC, designed to work on eInk screens.
+For now, you can only view, so you'll have to connect a keyboard to the serving computer, or find some other way to interact with it.
+
+This tool has been confirmed to work on several Kobo devices, such as the Kobo Libra 2 and Elipsa2E.
+It was optimized for text based workflows (document reading and writing), doing that it achieves a framerate of 30 fps.
+
+As VNC server we tested successfuly with TightVNC, x11vnc and TigerVNC.
+
+
+## Warning
+
+The screen can refresh up to 30 times per second, this will degrade the eInk display rapidly.
+Do not use with fast changing content like videos.
+
+Furthermore, this tool was only tested on Kobo Libra 2 and Kobo Elipsa 2E.
+**It is possible that it will damage yours.**
+*I cannot be held responsible, use this tool at your own risk.*
+
+[einkvnc_demo_kobo_rotated.webm](https://user-images.githubusercontent.com/4356678/184497681-683af36b-e226-47fc-8993-34a5b356edba.webm)
+
+## Usage
+
+You can use this tool by connecting to the eInk device through SSH, or using menu launchers on the device itself.
+
+To connect to a VNC server:
+
+``` shell
+./einkvnc [IP_ADDRESS] [PORT] [OPTIONS]
+```
+
+For example:
+
+``` shell
+./einkvnc 192.168.2.1 5902 --password abcdefg123 --contrast 2 
+```
+
+For faster framerates, use USB networking (see https://www.mobileread.com/forums/showthread.php?t=254214).
 
 ## Derivatives
 
