@@ -110,6 +110,8 @@ source ~/.bashrc
 cd /eink-vnc/client
 cross build --target arm-unknown-linux-musleabihf --release
 
+
+
 A lightweight CLI (command line interface) tool to view a remote screen over VNC, designed to work on eInk screens.
 For now, you can only view, so you'll have to connect a keyboard to the serving computer, or find some other way to interact with it.
 
