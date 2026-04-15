@@ -3,7 +3,10 @@
 From noobyme:
 I have fixed ZRLE DroidVNC issues using claude AI. 
 
-I have changed rotation default to use plato's function to see which value to use. I have added a contingency device detection using /mnt/onboard/.kobo/version instead of using environment variables because ssh does not pass those values. I have also added touchscreen functionality from plato input.rs
+I have changed rotation default to use plato's function to see which value to use, so that the correct default upright orientation is used. 
+I have added a contingency device detection using /mnt/onboard/.kobo/version instead of using environment variables because starting the tool over ssh does not pass those values. 
+I have also added touchscreen functionality from plato input.rs
+I have copied over the ClaraColor and LibraColor device.rs from plato's latest version, so that those devices may be correctly detected if used, Im unsure if the actual program will work however, but I do know that its possible for an incorrectly detected device to still work, and in the future so may devices not yet released as the after detecting the device, only 2 paths emerge, KoboFrameBuffer1 or KoboFrameBuffer2. Only Mark8 devices do KFB1, everything else does KFB2.
 
 The original commit did not have an issue with zrle droidvnc unless it was a debug compile, in which case it would crash after briefly appearing to work due to it being too slow, apparently. Idk for sure I asked claude to help me. The latest commit however does have an issue, zrle droidvnc doesnt work at all. The compiled file provided by anchovy is the oldest commit one, but you cannot rotate the screen with it
 
