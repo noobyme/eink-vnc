@@ -78,7 +78,7 @@ pub const MULTI_TOUCH_CODES_A: TouchCodes = TouchCodes {
 
 pub const MULTI_TOUCH_CODES_B: TouchCodes = TouchCodes {
     pressure: ABS_MT_PRESSURE,
-    .. MULTI_TOUCH_CODES_A
+    .. MULTI_TOUCH_CODES_A //fill rest of fields with this struct
 };
 
 #[repr(C)]
@@ -142,7 +142,7 @@ pub enum ButtonCode {
     Raw(u16),
 }
 
-impl ButtonCode {
+impl ButtonCode { //enum methods/associated functions
     fn from_raw(code: u16, rotation: i8, button_scheme: ButtonScheme) -> ButtonCode {
         match code {
             KEY_POWER => ButtonCode::Power,
@@ -153,6 +153,7 @@ impl ButtonCode {
             PEN_ERASE => ButtonCode::Erase,
             PEN_HIGHLIGHT => ButtonCode::Highlight,
             _ => ButtonCode::Raw(code)
+            //match constants defined above, returns buttoncode enum variant
         }
     }
 }
@@ -178,7 +179,7 @@ pub fn display_rotate_event(n: i8) -> InputEvent {
         code: KEY_ROTATE_DISPLAY,
         value: n as i32,
     }
-}
+}//setting up touch event struct
 
 pub fn button_scheme_event(v: i32) -> InputEvent {
     let mut tp = libc::timeval { tv_sec: 0, tv_usec: 0 };
@@ -189,7 +190,7 @@ pub fn button_scheme_event(v: i32) -> InputEvent {
         code: KEY_BUTTON_SCHEME,
         value: v,
     }
-}
+}//setting up event struct
 
 #[derive(Debug, Copy, Clone)]
 pub enum DeviceEvent {
@@ -224,11 +225,67 @@ pub fn seconds(time: libc::timeval) -> f64 {
 }
 
 pub fn raw_events(paths: Vec<String>) -> (Sender<InputEvent>, Receiver<InputEvent>) {
+    //<T> generic type parameter so can handle whatever struct is actually initiated
     let (tx, rx) = mpsc::channel();
+    //create a new channel
     let tx2 = tx.clone();
-    thread::spawn(move || parse_raw_events(&paths, &tx));
-    (tx2, rx)
+    //clone sender so can move one and return the other
+    thread::spawn(move || parse_raw_events(&paths, &tx)); //sends message input_event.assume_init()
+    //usually func creates new scope so channels are not seen by each function.
+    //each channel creation is new, but here if pass as ref to closure andmove, can see?
+    //i suppose in the main.rs function call you nest the function calls so one returns to the other as parameters
+    (tx2, rx)//return the channel pair
+}//create channel and thread, which calls the actual function that listens. returns sender and receiver
+//parse raw is only for touch input
+//for every channel function, call the actual function and move to thread
+//raw events reads touch input codes, then returns the channels, clone is returned bc thread owns original?
+//raw events reads touch codes, returns inputevent struct channel sender and receiver,
+// device events recieves inputevent, returns deviceevent enum receiver,
+// then usb events returns deviceevent receiver
+//rust supports multi sender but only one receiver
+pub fn device_events(rx: Receiver<InputEvent>, rotation:i8) -> Receiver<DeviceEvent> {
+    //since only 1 receiver channel is possible, the input parameter for this function
+    //is the receiver from raw_events, which will receive an inputevent struct
+    let (ty, ry) = mpsc::channel();//new channel
+    thread::spawn(move || parse_device_events(&rx, &ty, rotation));//thread spawn take ownership of sending channel
+    //take ownership of receiving channel from rawevents too, then uses sending channel to send deviceeventenum receiver back to this function?
+    ry//return the receiver channel, but we have not yet used it to receive any message, that will be done in main when actually call
+    //these functions
+
+
+    //no need clone bc only rx and ty are used?
+    //device events translates the structs into actual touch
 }
+pub fn usb_events() -> Receiver<DeviceEvent> {
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || parse_usb_events(&tx));
+    rx //returns another channel, a new one, not linked to the other. returns receiver so when main app calls it can recv a value but not yet here
+    //no need clone bc only tx is used?
+}
+
+//below code shows how channels are created and then passed, but function parameter only defines the parameter and does
+//not necessarily mean its the same one as created, can pass any into it. define an input parameter as same name as channel,
+//shiould have used a diff name so not confusing.,..
+
+//let (raw_sender, raw_receiver) = raw_events(paths);
+//     let touch_screen = gesture_events(device_events(raw_receiver, context.display, context.settings.button_scheme));
+//     let usb_port = usb_events();
+//
+//     let (tx, rx) = mpsc::channel();
+//     let tx2 = tx.clone();
+//
+//     thread::spawn(move || {
+//         while let Ok(evt) = touch_screen.recv() {
+//             tx2.send(evt).ok();
+//         }
+//     });
+//
+//     let tx3 = tx.clone();
+//     thread::spawn(move || {
+//         while let Ok(evt) = usb_port.recv() {
+//             tx3.send(Event::Device(evt)).ok();
+//         }
+//     });
 
 pub fn parse_raw_events(paths: &[String], tx: &Sender<InputEvent>) -> Result<(), Error> {
     let mut files = Vec::new();
@@ -269,11 +326,7 @@ pub fn parse_raw_events(paths: &[String], tx: &Sender<InputEvent>) -> Result<(),
     Ok(())
 }
 
-pub fn usb_events() -> Receiver<DeviceEvent> {
-    let (tx, rx) = mpsc::channel();
-    thread::spawn(move || parse_usb_events(&tx));
-    rx
-}
+
 
 fn parse_usb_events(tx: &Sender<DeviceEvent>) {
     let path = CString::new("/tmp/nickel-hardware-status").unwrap();
@@ -327,11 +380,7 @@ fn parse_usb_events(tx: &Sender<DeviceEvent>) {
     }
 }
 
-pub fn device_events(rx: Receiver<InputEvent>, display: Display, button_scheme: ButtonScheme) -> Receiver<DeviceEvent> {
-    let (ty, ry) = mpsc::channel();
-    thread::spawn(move || parse_device_events(&rx, &ty, display, button_scheme));
-    ry
-}
+
 
 struct TouchState {
     position: Point,
@@ -347,88 +396,256 @@ impl Default for TouchState {
     }
 }
 
-pub fn parse_device_events(rx: &Receiver<InputEvent>, ty: &Sender<DeviceEvent>, display: Display, button_scheme: ButtonScheme) {
+pub fn parse_device_events(rx: &Receiver<InputEvent>, ty: &Sender<DeviceEvent>, rotation:i8) {
+    println!("parse_dev_ev");
     let mut id = 0;
     let mut last_activity = -60;
-    let Display { mut dims, mut rotation } = display;
+    //let Display { mut dims, mut rotation } = display;
+    let mut dims_x = CURRENT_DEVICE.dims.1;
+    let mut dims_y = CURRENT_DEVICE.dims.0;
     let mut fingers: FxHashMap<i32, Point> = FxHashMap::default();
-    let mut packets: FxHashMap<i32, TouchState> = FxHashMap::default();
+    let mut packets: FxHashMap<i32, TouchState> = FxHashMap::default();//empty hashmaps
     let proto = CURRENT_DEVICE.proto;
+    //store each event in hasmap? with key and value? id is mutable,
+    //kind code value.
+    //touchstate struct stores point and pressure
+    //point stores 2 co ords
 
     let mut tc = match proto {
         TouchProto::Single => SINGLE_TOUCH_CODES,
         TouchProto::MultiA => MULTI_TOUCH_CODES_A,
         TouchProto::MultiB => MULTI_TOUCH_CODES_B,
-        TouchProto::MultiC => MULTI_TOUCH_CODES_B,
+        TouchProto::MultiC => MULTI_TOUCH_CODES_B,//turn touch code into struct w hex values for x,y, area/pressure
     };
+    //pub enum TouchProto {
+    //     Single,
+    //     MultiA,
+    //     MultiB, // Pressure won't indicate a finger release.
+    //     MultiC,
+    //pub const SINGLE_TOUCH_CODES: TouchCodes = TouchCodes {
+    //     pressure: ABS_PRESSURE,
+    //     x: ABS_X,
+    //     y: ABS_Y,
+    // these are the linux codes for the events that tell you what the value is for
+    // pub const MULTI_TOUCH_CODES_A: TouchCodes = TouchCodes {
+    //     pressure: ABS_MT_TOUCH_MAJOR,
+    //     x: ABS_MT_POSITION_X,
+    //     y: ABS_MT_POSITION_Y,
+    //major stands for major axis of the contact area
+    // pub const MULTI_TOUCH_CODES_B: TouchCodes = TouchCodes {
+    //     pressure: ABS_MT_PRESSURE,
+    //     .. MULTI_TOUCH_CODES_A
+    // }; fill rest of fields from A
 
     if proto == TouchProto::Single {
         packets.insert(id, TouchState::default());
     }
+    //insert id finger=0, point 0,0,pressure,0
+    //into packets/touchstate(pt(x,y)+pressure?), fingers/point,
+    //if its multi touch then it remains empty
 
     let (mut mirror_x, mut mirror_y) = CURRENT_DEVICE.should_mirror_axes(rotation);
+    println!("parse_dev_ev beforeswap,MX{:?} MY{:?} TCX{:?} TCY{:?} CDSWAR{:?}", mirror_x, mirror_y,tc.x,tc.y,CURRENT_DEVICE.should_swap_axes(rotation));
     if CURRENT_DEVICE.should_swap_axes(rotation) {
+        //why true when upright orientation seems mistake, unless plato relies on swapped axes?
+        //again never called in this implementation so we dk. in
+        //plato context struct calls framebuffer rotation function to get a value...
+        //how odd, Default for Nia is to swap axes? swap and mirror is not same,
+        //only tc EVENT RAW EVENT CODE switched...
         mem::swap(&mut tc.x, &mut tc.y);
-    }
+        dims_x = CURRENT_DEVICE.dims.0;
+        dims_y = CURRENT_DEVICE.dims.1;
+        //mem::swap(&mut CURRENT_DEVICE.dims.0, &mut CURRENT_DEVICE.dims.1);
 
-    let mut button_scheme = button_scheme;
+        // } else if evt.code == KEY_ROTATE_DISPLAY {
+        //                 let next_rotation = evt.value as i8;
+        //                 if next_rotation != rotation {
+        //                     let delta = (rotation - next_rotation).abs();
+        //                     if delta % 2 == 1 {
+        //                         mem::swap(&mut tc.x, &mut tc.y);
+        //                         mem::swap(&mut CURRENT_DEVICE.dims.0, &mut CURRENT_DEVICE.dims.1);
+        //                     }
+        //                     rotation = next_rotation;
+        //                     let should_mirror = CURRENT_DEVICE.should_mirror_axes(rotation);
+        //                     mirror_x = should_mirror.0;
+        //                     mirror_y = should_mirror.1;
+        //                 }
+    }
+    println!("parse_dev_ev afterswap,MX{:?} MY{:?} TCX{:?} TCY{:?} CDSWAR{:?}", mirror_x, mirror_y,tc.x,tc.y,CURRENT_DEVICE.should_swap_axes(rotation));
+    //let mut button_scheme = button_scheme;
 
     while let Ok(evt) = rx.recv() {
-        if evt.kind == EV_ABS {
-            if evt.code == ABS_MT_TRACKING_ID {
-                if evt.value >= 0 {
-                    id = evt.value;
+        //receive raw event from the channel from raw_event function,
+        //loop executes only when channel has received something, 1 loop per receive
+        //bind evt to the inner value from ok, and loop while it is ok?
+        // when channel ends returns error... when returns nothing, block thread
+        if evt.kind == EV_ABS { // 0,1,3 EV_ABS=3, event type, code, value
+            if evt.code == ABS_MT_TRACKING_ID { //this is for fingers? is 57 event code
+                if evt.value >= 0 { //max is 2
+                    id = evt.value;//make id the event value
                     packets.insert(id, TouchState::default());
+                    //finger 0 will come first, finger 1 and 2 later if exists
+                    //packets is touchstate hashmap, initlaise 0/1/2,0,0 or
+                    //raw events, will always send ABS_MT_TRACKING_ID if multi touch,
+                    // otherwise will only send x,y or pressure
+                    //so the earlier initialisation is replaced by this one if mt,
+                    // at the end of each frame will be cleared to empty
+                    //each frame contains multiple fingers and co ords and pressures potentially
+                    // if proto == TouchProto::Single {
+                    //     packets.insert(id, TouchState::default());
+                    // }
                 }
-            } else if evt.code == tc.x {
+                //why fingers and packets, points and touch states? touch states contain points and pressure...
+                //so for each finger id we have a co ordinate and for each finger id in packets we have a touch state with
+                //point and pressure, why bother with two hash maps? I see chatgpt says finger persists across frames while packets
+                //is reset at the end of each frame, thus fingers stores last known position
+                //fingers will remove data if the pressure at that point becomes 0, which will be sent by the touchinput event
+                //how often does a new event frame occur?
+                //so we loop through each event, one finger has x,y,p, and each time each finger gets put into the hashmaps, but
+                //here so far is only packets only at the end of the frame but fingers get entries
+            } else if evt.code == tc.x { //touch code x component, depends what type of touch code,
+                //if raw event is the x component
                 if let Some(state) = packets.get_mut(&id) {
-                    state.position.x = if mirror_x {
-                        dims.0 as i32 - 1 - evt.value
-                    } else {
-                        evt.value
+                    //get value from key, define as state
+                    //Some or None, returns? packets gets touch states, which defaults to 0,0,0 on startup
+                    //remember each event contains only x,y,pressure or syn to end the block
+                    //get the finger id, which default is zero, but if earlier event says finger id
+                    //which is now 0,1 or 2 , and bind to variable state
+                    //but get_mut gives mutable reference to reference of id? modify it modify original data too
+                    state.position.x = if mirror_x { //if should swap x and y? boolean true or false
+                        // some unwraps option, set position X in point to event value or mirrored event value
+                        dims_x as i32 - 1 - evt.value //why minus 1 and value?
+                    } else { //if false and no want mirror
+                        evt.value //set the state.position.x to evt.value?
+                        //if we do swap tc x and y, x events get passed to y arm, y events get passed to x arm, but dims does not get changed?
                     };
+                    println!("parse_dev_ev x, POSX{:?} MIRRX{:?} DIMSX{:?} EVT{:?}", state.position.x, mirror_x, dims_x, evt.value);
+
                 }
-            } else if evt.code == tc.y {
+            } else if evt.code == tc.y { //touch code y component, depends what type of touch code, it will depend on
+                //what code is for what device
+                //if we mirror, swap tc.x and tc.y so here is tc.x instead, well use y values for x?
+                //but packets state still y! this is about mirror not swap?
                 if let Some(state) = packets.get_mut(&id) {
+                    //if packets value for id is some, bind to state. new scope so must redo here
                     state.position.y = if mirror_y {
-                        dims.1 as i32 - 1 - evt.value
+                        dims_y as i32 - 1 - evt.value
                     } else {
                         evt.value
                     };
-                }
-            } else if evt.code == tc.pressure {
+                    println!("parse_dev_ev y, POSY{:?} MIRY{:?} DIMSY{:?} EVT{:?}", state.position.y, mirror_y, dims_y, evt.value);
+                }//again just checks if should swap axes, otherwise just set to the value
+            } else if evt.code == tc.pressure { //if not x or y but pressure
                 if let Some(state) = packets.get_mut(&id) {
-                    state.pressure = evt.value;
+                    //bind value from key id, finger 0,1 or 2, to state, which is returned from a
+                    //some from .get_mut
+                    state.pressure = evt.value; //set pressure value
                     if proto == TouchProto::Single && CURRENT_DEVICE.mark() == 3 && state.pressure == 0 {
-                        state.position.x = dims.0 as i32 - 1 - state.position.x;
+                        state.position.x = dims_x as i32 - 1 - state.position.x;
+                        //why minus 1? make sure not out of bounds?
                         mem::swap(&mut state.position.x, &mut state.position.y);
-                    }
+                        //swap axes or swap old data for new?
+                    }//if we can only track 1 finger and device is TouchAB, and pressure in the raw event is 0,
+                    //mirror the x position? and then swap x and y  ?
                 }
             }
+            //by here we may have 3 fingers each with point and pressure in packets, but fingers nothing yet
         } else if evt.kind == EV_SYN && evt.code == SYN_REPORT {
             // The absolute value accounts for the wrapping around that might occur,
             // since `tv_sec` can't grow forever.
+            //End of raw event block
             if (evt.time.tv_sec - last_activity).abs() >= 60 {
-                last_activity = evt.time.tv_sec;
+                // let mut last_activity = -60; t-60 >=60? so t needs to be 120?
+                last_activity = evt.time.tv_sec; //set last activity here to current time... so next time 1 minute passes
                 ty.send(DeviceEvent::UserActivity).ok();
-            }
+            }//send enum? to device event loop function?
 
-            if proto == TouchProto::MultiB {
+            if proto == TouchProto::MultiB { //why only for multi b? no multi A??
+                //bc only B has pressure while A has contact area instead?
+                //c is same as b... so for all non single, cleared at end
+                //but the below is clearing all the fingers that dont have packets associated? or if channel has closed,
+                //but why send fingerup here? because if finger does not contain the id, send finger up?
+                //if 0,0 =>delete 0,1 keep, 1,0 keep, 1,1 keep
+                //why would sending channel become closed though? the receiver ?
+                //event is ev syn
                 fingers.retain(|other_id, other_position| {
+                    //at this point packets has been initialised with non zero values
+                    //but fingers has not yet been
+                    //i see retain iterates over the hashmap, giving the pairs as closure input
+                    //retain by definition uses a closure so the closure is part of retain,
+                    // values come from it
+                    //this closure is used as an input parameter for the function,
+                    // so values come from the call itself
+                    //retains only the values that match the predicate in which case is the closure?
+                    //retain expects closure that takes inputs and returns a bool
+                    //for fingers, check if packets contains same key, or send error in which case return true?
+                    //we could be cycling the fingers from theprevious frame?
+                    // check if theyre still present, bc fingers not
+                    //yet updated only packets have been
                     packets.contains_key(&other_id) ||
+                        //iterate through fingers which is currently empty and check
+                        // if packets has the same finger
+                        //which is either 0,1 or 2 which has the x,y and pressure values
+                        //||or operator only executes second if first if false,
+                        // thus whether send message of finger up
+                        //only if fingers do not contain key and.. if we cant send the message,
+                        // return true, otherwise, return false
+                        //so retain does not keep this id, so message is sent of fingerup and we
+                        // get rid of the key because? finger no longer present. packets is current frame, fingers is last frame
+                        //we send the message if not present, and if message successfully sent, send false, meaning retain
+                        //will not keep them
+
+                        //first time around, fingers will be empty thus we will send fingerup?
+                        // but fingers is empty how can we send anything?
+                        // ah okay retain only executes if fingers is non empty
                     ty.send(DeviceEvent::Finger {
-                        id: *other_id,
+                        //sending channel? but the loop itself is based on rx receive channel?
+                        //let event
+                        //while let Ok(evt) = rx.recv() so for every ok event it continues the loop?
+                        // and if false, no rx receiving from raw events,
+                        // ty is sending to the channel created in this function/deviceevents function
+                        id: *other_id, //other_id is 0? so is other_position right now?
                         time: seconds(evt.time),
                         status: FingerStatus::Up,
                         position: *other_position,
+                        //retain requires ownership, * dereferences and gets actual value
                     }).is_err()
-                });
+                    //if ty.send fails, return true, so if packets has the key finger id 0 or the channel is closed
+                    //return true to retain, so only keep finger 0 in packets right now
+                    //but if send succeeds, return false. if packets has finger id 1 or 2 return false
+                    //initialising finger enum struct?
+                    //pub enum DeviceEvent {
+                    //     Finger {
+                    //         id: i32,
+                    //         time: f64,
+                    //         status: FingerStatus,
+                    //         position: Point,
+                    //     },
+                }); //end of retain function, end of closure body
             }
 
             for (&id, state) in &packets {
+                // let mut fingers: FxHashMap<i32, Point> = FxHashMap::default();
+                //  fingers not yet initialised
+                // let mut packets: FxHashMap<i32, TouchState> = FxHashMap::default();
+                // packets has been initialised but in
+                // 1st pass will only contain one key value pair
+                // pub struct Point {
+                //     pub x: i32,
+                //     pub y: i32,
+                // struct TouchState {
+                //     position: Point,
+                //     pressure: i32,
                 if let Some(&pos) = fingers.get(&id) {
-                    if state.pressure > 0 {
+                    //bind inner value of fingers.get(&id) to pos, returns a point struct?
+                    //&pos says dereference the right side
+                    //if fingers has key id 0, bind the pos to the value of the point
+                    if state.pressure > 0 { //default initalisation is zero
+                        //state is from packets, which means the values are non zero by now
                         if state.position != pos {
+                            //if the state position in packet hashmap has changed to the last position in fingers hashmap
+                            //if first time, fingers is empty and this block doesnt execute
+                            //state.position have already processed and now we are at end of event frame
                             ty.send(DeviceEvent::Finger {
                                 id,
                                 time: seconds(evt.time),
@@ -436,17 +653,27 @@ pub fn parse_device_events(rx: &Receiver<InputEvent>, ty: &Sender<DeviceEvent>, 
                                 position: state.position,
                             }).unwrap();
                             fingers.insert(id, state.position);
+                            //same id, but insert the state.position? from packets, overwriting the old value
+
                         }
-                    } else {
+                    } else { //if state pressure is 0, which might mean we havent
+                        // looped through any events yet? no if no events yet this doesnt even execute, finger
+                        //has been lifted, which sends a raw event saying that the
+                        // pressure at that point has become 0 from 1024?
+                        //will a raw event be send to say pressure has become zero? apparently yes
                         ty.send(DeviceEvent::Finger {
                             id,
                             time: seconds(evt.time),
                             status: FingerStatus::Up,
                             position: state.position,
                         }).unwrap();
-                        fingers.remove(&id);
+                        fingers.remove(&id);//remove the data bc finger no longer touching screen
                     }
                 } else if state.pressure > 0 {
+                    //we looping through packets
+                    //if let Some(&pos) = fingers.get(&id) {
+                    // if fingers does not contain that id,
+                    //the first time, fingers is empty, thus this block is executed
                     ty.send(DeviceEvent::Finger {
                         id,
                         time: seconds(evt.time),
@@ -454,57 +681,62 @@ pub fn parse_device_events(rx: &Receiver<InputEvent>, ty: &Sender<DeviceEvent>, 
                         position: state.position,
                     }).unwrap();
                     fingers.insert(id, state.position);
-                }
+                }//add event data to finger, now is no longer empty
             }
 
             if proto != TouchProto::Single {
                 packets.clear();
-            }
-        } else if evt.kind == EV_KEY {
-            if SLEEP_COVER.contains(&evt.code) {
-                if evt.value == VAL_PRESS {
-                    ty.send(DeviceEvent::CoverOn).ok();
-                } else if evt.value == VAL_RELEASE {
-                    ty.send(DeviceEvent::CoverOff).ok();
-                } else if evt.value == VAL_REPEAT {
-                    ty.send(DeviceEvent::CoverOn).ok();
-                }
-            } else if evt.code == KEY_BUTTON_SCHEME {
-                if evt.value == VAL_PRESS {
-                    button_scheme = ButtonScheme::Inverted;
-                } else {
-                    button_scheme = ButtonScheme::Natural;
-                }
-            } else if evt.code == KEY_ROTATE_DISPLAY {
-                let next_rotation = evt.value as i8;
-                if next_rotation != rotation {
-                    let delta = (rotation - next_rotation).abs();
-                    if delta % 2 == 1 {
-                        mem::swap(&mut tc.x, &mut tc.y);
-                        mem::swap(&mut dims.0, &mut dims.1);
-                    }
-                    rotation = next_rotation;
-                    let should_mirror = CURRENT_DEVICE.should_mirror_axes(rotation);
-                    mirror_x = should_mirror.0;
-                    mirror_y = should_mirror.1;
-                }
-            } else if evt.code != BTN_TOUCH {
-                if let Some(button_status) = ButtonStatus::try_from_raw(evt.value) {
-                    ty.send(DeviceEvent::Button {
-                        time: seconds(evt.time),
-                        code: ButtonCode::from_raw(evt.code, rotation, button_scheme),
-                        status: button_status,
-                    }).unwrap();
-                }
-            }
-        } else if evt.kind == EV_MSC && evt.code == MSC_RAW {
-            if evt.value >= MSC_RAW_GSENSOR_PORTRAIT_DOWN && evt.value <= MSC_RAW_GSENSOR_LANDSCAPE_LEFT {
-                let next_rotation = GYROSCOPE_ROTATIONS.iter().position(|&v| v == evt.value)
-                                                       .map(|i| CURRENT_DEVICE.transformed_gyroscope_rotation(i as i8));
-                if let Some(next_rotation) = next_rotation {
-                    ty.send(DeviceEvent::RotateScreen(next_rotation)).ok();
-                }
-            }
-        }
+            }//remove all packets if not single finger device? if it is a single finger device...
+            // then there wont be more than 1 finger at a time
+            //this only triggers at end of each block
+
+            //need to go through example raw events to see what happens eh imagine the actual flow
+        }// else if evt.kind == EV_KEY {
+        //     //buttons
+        //     if SLEEP_COVER.contains(&evt.code) {
+        //         if evt.value == VAL_PRESS {
+        //             ty.send(DeviceEvent::CoverOn).ok();
+        //         } else if evt.value == VAL_RELEASE {
+        //             ty.send(DeviceEvent::CoverOff).ok();
+        //         } else if evt.value == VAL_REPEAT {
+        //             ty.send(DeviceEvent::CoverOn).ok();
+        //         }
+        //     } else if evt.code == KEY_BUTTON_SCHEME {
+        //         if evt.value == VAL_PRESS {
+        //             button_scheme = ButtonScheme::Inverted;
+        //         } else {
+        //             button_scheme = ButtonScheme::Natural;
+        //         }
+        //     } else if evt.code == KEY_ROTATE_DISPLAY {
+        //         let next_rotation = evt.value as i8;
+        //         if next_rotation != rotation {
+        //             let delta = (rotation - next_rotation).abs();
+        //             if delta % 2 == 1 {
+        //                 mem::swap(&mut tc.x, &mut tc.y);
+        //                 mem::swap(&mut CURRENT_DEVICE.dims.0, &mut CURRENT_DEVICE.dims.1);
+        //             }
+        //             rotation = next_rotation;
+        //             let should_mirror = CURRENT_DEVICE.should_mirror_axes(rotation);
+        //             mirror_x = should_mirror.0;
+        //             mirror_y = should_mirror.1;
+        //         }
+        //     } else if evt.code != BTN_TOUCH {
+        //         if let Some(button_status) = ButtonStatus::try_from_raw(evt.value) {
+        //             ty.send(DeviceEvent::Button {
+        //                 time: seconds(evt.time),
+        //                 code: ButtonCode::from_raw(evt.code, rotation, button_scheme),
+        //                 status: button_status,
+        //             }).unwrap();
+        //         }
+        //     }
+        // } else if evt.kind == EV_MSC && evt.code == MSC_RAW {
+        //     if evt.value >= MSC_RAW_GSENSOR_PORTRAIT_DOWN && evt.value <= MSC_RAW_GSENSOR_LANDSCAPE_LEFT {
+        //         let next_rotation = GYROSCOPE_ROTATIONS.iter().position(|&v| v == evt.value)
+        //                                                .map(|i| CURRENT_DEVICE.transformed_gyroscope_rotation(i as i8));
+        //         if let Some(next_rotation) = next_rotation {
+        //             ty.send(DeviceEvent::RotateScreen(next_rotation)).ok();
+        //         }
+        //     }
+        // }
     }
 }
