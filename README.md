@@ -17,6 +17,7 @@ The original commit did not have an issue with zrle droidvnc unless it was a deb
 Rotate to landscape display using flag --rotate 2. Your device landscape number might be different
 Use resolution smaller than or exactly equal to your display. eg common resolution of 1024x768 will fail to work correctly on Kobo Nia because 1024x758 is the maximum. Custom resolution of 1024x758 works!
 To stop all other programs use this command before launching eink-vnc, thanks koreader startup script.
+
 killall -q -TERM nickel hindenburg sickel fickel strickel fontickel adobehost foxitpdf iink dhcpcd-dbus dhcpcd bluealsa bluetoothd fmon nanoclock.lua
 
 Compilation instructions
