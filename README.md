@@ -1,7 +1,11 @@
 # eInk VNC
 
 From noobyme:
-I have fixed ZRLE DroidVNC issues using claude AI. I have changed rotation default to use plato's function to see which value to use. I have added a contingency device detection using /mnt/onboard/.kobo/version instead of using environment variables because ssh does not pass those values. I have also added touchscreen functionality from plato input.rs
+I have fixed ZRLE DroidVNC issues using claude AI. 
+
+I have changed rotation default to use plato's function to see which value to use. I have added a contingency device detection using /mnt/onboard/.kobo/version instead of using environment variables because ssh does not pass those values. I have also added touchscreen functionality from plato input.rs
+
+The original commit did not have an issue with zrle droidvnc unless it was a debug compile, in which case it would crash after briefly appearing to work due to it being too slow, apparently. Idk for sure I asked claude to help me. The latest commit however does have an issue, zrle droidvnc doesnt work at all. The compiled file provided by anchovy is the oldest commit one, but you cannot rotate the screen with it
 
 Rotate to landscape display using flag --rotate 2. Your device landscape number might be different
 Use resolution smaller than or exactly equal to your display. eg common resolution of 1024x768 will fail to work correctly on Kobo Nia because 1024x758 is the maximum. Custom resolution of 1024x758 works!
