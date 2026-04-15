@@ -7,6 +7,8 @@ use std::fs::File;
 use std::io::Read;
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Model {
+    LibraColor,
+    ClaraColor,
     ClaraBW,
     Elipsa2E,
     Clara2E,
@@ -44,6 +46,8 @@ pub enum Orientation {
 impl fmt::Display for Model {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { //fmt::Formatter is a struct from fmt crate
         match *self {
+            Model::LibraColour   => write!(f, "Libra Colour"),
+            Model::ClaraColour   => write!(f, "Clara Colour"),
             Model::ClaraBW       => write!(f, "Clara BW"),
             Model::Elipsa2E      => write!(f, "Elipsa 2E"),
             Model::Clara2E       => write!(f, "Clara 2E"),
@@ -212,6 +216,18 @@ impl Device { //for all device enums implment this function
                 dims: (1072, 1448),
                 dpi: 300,
             },
+            "spaColour" => Device {
+                model: Model::ClaraColour,
+                proto: TouchProto::MultiB,
+                dims: (1072, 1448),
+                dpi: 300,
+            },
+            "monza" => Device {
+                model: Model::LibraColour,
+                proto: TouchProto::MultiB,
+                dims: (1264, 1680),
+                dpi: 300,
+            },
             _ => {
                 let content = fs::read_to_string("/mnt/onboard/.kobo/version").unwrap_or_else(|_| String::new());
                 let first_four: String = content.chars().take(4).collect();
@@ -351,6 +367,18 @@ impl Device { //for all device enums implment this function
                         dims: (600, 800),
                         dpi: 167,
                     },
+                    "N367" => Device {
+                        model: Model::ClaraColour,
+                        proto: TouchProto::MultiB,
+                        dims: (1072, 1448),
+                        dpi: 300,
+                    },
+                    "N428" => Device {
+                        model: Model::LibraColour,
+                        proto: TouchProto::MultiB,
+                        dims: (1264, 1680),
+                        dpi: 300,
+                    },
                     _ => Device {
                         model: Model::ClaraBW,
                         proto: TouchProto::MultiB,
@@ -376,7 +404,9 @@ impl Device { //for all device enums implment this function
             Model::Libra2 |
             Model::Clara2E |
             Model::Elipsa2E |
-            Model::ClaraBW => FrontlightKind::Premixed,
+            Model::ClaraBW |
+            Model::ClaraColour |
+            Model::LibraColour => FrontlightKind::Premixed,
             _ => FrontlightKind::Standard, //rest
         }
     }
@@ -393,13 +423,13 @@ impl Device { //for all device enums implment this function
     pub fn has_gyroscope(&self) -> bool {
         matches!(self.model,
                  Model::Forma | Model::Forma32GB | Model::LibraH2O |
-                 Model::Elipsa | Model::Sage | Model::Libra2 | Model::Elipsa2E)
+                 Model::Elipsa | Model::Sage | Model::Libra2 | Model::Elipsa2E | Model::LibraColour)
     }
 
     pub fn has_page_turn_buttons(&self) -> bool {
         matches!(self.model,
                  Model::Forma | Model::Forma32GB | Model::LibraH2O |
-                 Model::Sage | Model::Libra2)
+                 Model::Sage | Model::Libra2 | Model::LibraColour)
     }
 
     pub fn has_power_cover(&self) -> bool {
@@ -433,7 +463,9 @@ impl Device { //for all device enums implment this function
 
     pub fn mark(&self) -> u8 {
         match self.model {
-            Model::ClaraBW => 12,
+            Model::LibraColour => 13,
+            Model::ClaraBW |
+            Model::ClaraColour => 12,
             Model::Elipsa2E => 11,
             Model::Clara2E => 10,
             Model::Libra2 => 9,
@@ -503,7 +535,8 @@ impl Device { //for all device enums implment this function
             Model::LibraH2O => 0,
             Model::AuraH2OEd2V1 |
             Model::Forma | Model::Forma32GB |
-            Model::Sage | Model::Libra2 | Model::Elipsa2E => 1,
+            Model::Sage | Model::Libra2 | Model::Elipsa2E
+            | Model::LibraColour => 1,
             _ => 3,
         }
     }
@@ -538,7 +571,8 @@ impl Device { //for all device enums implment this function
             Model::LibraH2O => n ^ 1,
             Model::Libra2 |
             Model::Sage |
-            Model::Elipsa2E => (6 - n) % 4,
+            Model::Elipsa2E |
+            Model::LibraColour => (6 - n) % 4,
             Model::Elipsa => (4 - n) % 4,
             _ => n,
         }
