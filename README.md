@@ -10,7 +10,7 @@ I have added a contingency device detection using /mnt/onboard/.kobo/version ins
 
 I have also added touchscreen functionality from plato input.rs
 
-I have copied over the ClaraColor and LibraColor device.rs from plato's latest version, so that those devices may be correctly detected if used, Im unsure if the actual program will work however, but I do know that its possible for an incorrectly detected device to still work, and in the future so may devices not yet released as the after detecting the device, only 2 paths emerge, KoboFrameBuffer1 or KoboFrameBuffer2. Only Mark8 devices do KFB1, everything else does KFB2.
+I have copied over the ClaraColor and LibraColor device.rs from plato's latest version, so that those devices may be correctly detected if used, Im unsure if the actual program will work however, but I do know that its possible for an incorrectly detected device to still work, after detecting the device, only 2 paths emerge, KoboFrameBuffer1 or KoboFrameBuffer2. Only Mark8 devices do KFB1, everything else does KFB2. Plato supports color devices but i havent looked into the framebuffer code yet to see where the difference is.
 
 The original commit did not have an issue with zrle droidvnc unless it was a debug compile, in which case it would crash after briefly appearing to work due to it being too slow, apparently. Idk for sure I asked claude to help me. The latest commit however does have an issue, zrle droidvnc doesnt work at all. The compiled file provided by anchovy is the oldest commit one, but you cannot rotate the screen with it
 
