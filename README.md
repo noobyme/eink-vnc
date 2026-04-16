@@ -1,38 +1,24 @@
 # eInk VNC
 
-From noobyme:
+Updates from noobyme:
 
--I have fixed ZRLE DroidVNC issues using claude AI. 
-
+-I have fixed ZRLE DroidVNC NG issues using Claude AI. 
 -I have changed rotation default to use plato's function to see which value to use, so that the correct default upright orientation is used. 
-
 -I have added a contingency device detection using /mnt/onboard/.kobo/version instead of using environment variables because starting the tool over ssh does not pass those values. 
-
--I have also added touchscreen functionality from plato input.rs
-
--I have copied over the ClaraColor and LibraColor device.rs from plato's latest version, so that those devices may be correctly detected if used, Im unsure if the actual program will work however, but I do know that its possible for an incorrectly detected device to still work, after detecting the device, only 2 paths emerge, KoboFrameBuffer1 or KoboFrameBuffer2. Only Mark8 devices do KFB1, everything else does KFB2. Plato supports color devices but i havent looked into the framebuffer code yet to see where the difference is.
+-I have also setup touchscreen functionality from plato and rustvnc
+-I have copied over the ClaraColor and LibraColor device.rs from plato's latest version, so that those devices may be correctly detected if used, Im unsure if the actual program will work however, but I do know that its possible for an incorrectly detected device to still work.
 
 The original commit did not have an issue with zrle droidvnc unless it was a debug compile, in which case it would crash after briefly appearing to work due to it being too slow, apparently. Idk for sure I asked claude to help me. The latest commit however does have an issue, zrle droidvnc doesnt work at all. The compiled file provided by anchovy is the oldest commit one, but you cannot rotate the screen with it
-
-Rotate to landscape display using flag --rotate 2. Your device landscape number might be different.
-Use a resolution smaller than or exactly equal to your display. eg common resolution of 1024x768 will fail to work correctly on Kobo Nia because 1024x758 is the maximum. Custom resolution of 1024x758 works!
-To stop all other programs use this command before launching eink-vnc, so you can use touch input, thanks koreader startup script.
-
-```killall -q -TERM nickel hindenburg sickel fickel strickel fontickel adobehost foxitpdf iink dhcpcd-dbus dhcpcd bluealsa bluetoothd fmon nanoclock.lua```
-
-https://www.mobileread.com/forums/showthread.php?t=348481&page=2 Thanks elinkser for the info.
-Failed to fill whole buffer error? You messed up somewhere in login credentials or server side ip blocking.
-
 
 From original readme:
 
 A lightweight CLI (command line interface) tool to view a remote screen over VNC, designed to work on eInk screens.
-For now, you can only view, so you'll have to connect a keyboard to the serving computer, or find some other way to interact with it.
+~~~For now, you can only view, so you'll have to connect a keyboard to the serving computer, or find some other way to interact with it.~~~ There is now touch input.
 
-This tool has been confirmed to work on several Kobo devices, such as the Kobo Libra 2 and Elipsa2E.
+This tool has been confirmed to work on several Kobo devices, such as the Kobo Libra 2 and Elipsa2E, Nia and Glo.
 It was optimized for text based workflows (document reading and writing), doing that it achieves a framerate of 30 fps.
 
-As VNC server we tested successfuly with TightVNC, x11vnc and TigerVNC.
+As VNC server we tested successfuly with TightVNC, x11vnc and TigerVNC, DroidVNC NG.
 
 
 ## Warning
@@ -64,6 +50,17 @@ For example:
 
 For faster framerates, use USB networking (see https://www.mobileread.com/forums/showthread.php?t=254214).
 
+Rotate to landscape display using flag --rotate 2 or --rotate 0
+
+Use a resolution smaller than or exactly equal to your display. eg common resolution of 1024x768 will fail to work correctly on Kobo Nia because 1024x758 is the maximum. Custom resolution of 1024x758 works!
+
+To stop all other programs use this command before launching eink-vnc, so you can use touch input. From koreader startup script.
+
+```
+killall -q -TERM nickel hindenburg sickel fickel strickel fontickel adobehost foxitpdf iink dhcpcd-dbus dhcpcd bluealsa bluetoothd fmon nanoclock.lua
+```
+Failed to fill whole buffer error? You messed up somewhere in login credentials or server side ip blocking. 
+
 ## Derivatives
 
 The code responsible for rendering to the eInk display is written by baskerville and taken from https://github.com/baskerville/plato.
@@ -91,7 +88,8 @@ linker = "/home/noobyme/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf/bin/
 sudo dpkg --add-architecture armhf
 sudo add-apt-repository multiverse
 sudo add-apt-repository universe
-sudo nano /etc/apt/sources.list.d/ubuntu.sources```
+sudo nano /etc/apt/sources.list.d/ubuntu.sources
+```
 
 Types: deb
 URIs: http://archive.ubuntu.com/ubuntu/
@@ -156,4 +154,5 @@ source ~/.bashrc
 cd /eink-vnc/client
 cross build --target arm-unknown-linux-musleabihf --release
 ```
+https://www.mobileread.com/forums/showthread.php?t=348481&page=2 Thanks elinkser/szybet for the toolchain info.
 
