@@ -25,20 +25,24 @@ Compilation instructions
 To compile on wsl ubuntu noble 24.04, x86_64 CPU
 Go to linux user home directory, Clone repository, Download linaro cross toolchain file (the toolchain itself will do no need for sys root file). We want gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf.tar.xzn Extract toolchain. Make cargo directory and config file. Install rustup and target. Build. 
 
-```cd /home/noobyme
+```
+cd /home/noobyme
 git clone https://github.com/everydayanchovies/eink-vnc
 wget https://releases.linaro.org/components/toolchain/binaries/4.9-2017.01/arm-linux-gnueabihf/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf.tar.xz
 tar -xf gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf.tar.xz
 cd /eink-vnc/client/
 mkdir .cargo
-nano .cargo/config.toml```
+nano .cargo/config.toml
+```
 
 [target.armv7-unknown-linux-gnueabihf]
 linker = "/home/noobyme/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-gcc"
 
-```sudo apt-get install rustup
+```
+sudo apt-get install rustup
 rustup target add armv7-unknown-linux-gnueabihf
-cargo build --target armv7-unknown-linux-gnueabihf```
+cargo build --target armv7-unknown-linux-gnueabihf
+```
 
 The first time round I was got an error for these libraries, looks like it was because I had this in the config. 
 ```rustflags = [
