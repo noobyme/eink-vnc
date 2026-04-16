@@ -14,9 +14,9 @@ I have copied over the ClaraColor and LibraColor device.rs from plato's latest v
 
 The original commit did not have an issue with zrle droidvnc unless it was a debug compile, in which case it would crash after briefly appearing to work due to it being too slow, apparently. Idk for sure I asked claude to help me. The latest commit however does have an issue, zrle droidvnc doesnt work at all. The compiled file provided by anchovy is the oldest commit one, but you cannot rotate the screen with it
 
-Rotate to landscape display using flag --rotate 2. Your device landscape number might be different
-Use resolution smaller than or exactly equal to your display. eg common resolution of 1024x768 will fail to work correctly on Kobo Nia because 1024x758 is the maximum. Custom resolution of 1024x758 works!
-To stop all other programs use this command before launching eink-vnc, thanks koreader startup script.
+Rotate to landscape display using flag --rotate 2. Your device landscape number might be different.
+Use a resolution smaller than or exactly equal to your display. eg common resolution of 1024x768 will fail to work correctly on Kobo Nia because 1024x758 is the maximum. Custom resolution of 1024x758 works!
+To stop all other programs use this command before launching eink-vnc, so you can use touch input, thanks koreader startup script.
 
 killall -q -TERM nickel hindenburg sickel fickel strickel fontickel adobehost foxitpdf iink dhcpcd-dbus dhcpcd bluealsa bluetoothd fmon nanoclock.lua
 
