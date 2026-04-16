@@ -25,31 +25,31 @@ Compilation instructions
 To compile on wsl ubuntu noble 24.04, x86_64 CPU
 Go to linux user home directory, Clone repository, Download linaro cross toolchain file (the toolchain itself will do no need for sys root file). We want gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf.tar.xzn Extract toolchain. Make cargo directory and config file. Install rustup and target. Build. 
 
-'''cd /home/noobyme
+```cd /home/noobyme
 git clone https://github.com/everydayanchovies/eink-vnc
 wget https://releases.linaro.org/components/toolchain/binaries/4.9-2017.01/arm-linux-gnueabihf/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf.tar.xz
 tar -xf gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf.tar.xz
 cd /eink-vnc/client/
 mkdir .cargo
-nano .cargo/config.toml'''
+nano .cargo/config.toml```
 
 [target.armv7-unknown-linux-gnueabihf]
 linker = "/home/noobyme/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-gcc"
 
-'''sudo apt-get install rustup
+```sudo apt-get install rustup
 rustup target add armv7-unknown-linux-gnueabihf
-cargo build --target armv7-unknown-linux-gnueabihf'''
+cargo build --target armv7-unknown-linux-gnueabihf```
 
 The first time round I was got an error for these libraries, looks like it was because I had this in the config. 
-'''rustflags = [
+```rustflags = [
 "-C", "link-arg=--sysroot=/home/noobyme/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf/arm-linux-gnueabihf/libc",
-]'''
+]```
 if you run into that, extra steps to fix above error:
 
-'''sudo dpkg --add-architecture armhf
+```sudo dpkg --add-architecture armhf
 sudo add-apt-repository multiverse
 sudo add-apt-repository universe
-sudo nano /etc/apt/sources.list.d/ubuntu.sources'''
+sudo nano /etc/apt/sources.list.d/ubuntu.sources```
 
 Types: deb
 URIs: http://archive.ubuntu.com/ubuntu/
@@ -72,11 +72,11 @@ Components: main restricted universe multiverse
 Architectures: armhf
 Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 
-'''sudo apt update
+```sudo apt update
 sudo apt-get install libz-dev:armhf libbz2-dev:armhf libjpeg-dev:armhf libpng16-dev:armhf libgumbo-dev:armhf libopenjp2-dev:armhf libjbig2dec-dev:armhf
 
 cd /usr/lib/arm-linux-gnueabihf
-cp libz.* libbz2.* libjpeg.* libpng16.* libgumbo.* libopenjp2.* libjbig2dec.* /home/noobyme/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf/arm-linux-gnueabihf/libc/lib'''
+cp libz.* libbz2.* libjpeg.* libpng16.* libgumbo.* libopenjp2.* libjbig2dec.* /home/noobyme/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf/arm-linux-gnueabihf/libc/lib```
 
 Note:Copy and pasted commands from AI can fail because formatting differences
 Use AI to help, thats how I successfully compiled it.
@@ -86,7 +86,7 @@ Failed to fill whole buffer error? You messed up somewhere in login credentials 
 Eh, i didnt realise theres an easier way, using docker, from chatgpt
 Ubuntu 24.04, non WSL
 
-'''sudo apt update
+```sudo apt update
 sudo apt upgrade -y
 sudo apt install -y apt-transport-https ca-certificates curl software-properties-common lsb-release gnupg
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
@@ -109,7 +109,7 @@ cargo install cross
 echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 cd /eink-vnc/client
-cross build --target arm-unknown-linux-musleabihf --release'''
+cross build --target arm-unknown-linux-musleabihf --release```
 
 From original readme:
 
