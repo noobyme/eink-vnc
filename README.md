@@ -45,6 +45,19 @@ To connect to a VNC server:
 ``` shell
 ./einkvnc [IP_ADDRESS] [PORT] [OPTIONS]
 ```
+Available options:
+Host
+Port
+Username
+Password
+Contrast: apply a post processing contrast filter
+White_cutoff: apply a post processing filter to turn colors greater than the specified value to white (255
+Exclusive: request a non-shared sessio
+Rotate
+
+WIP:
+Scale
+Longtap
 
 For example:
 
