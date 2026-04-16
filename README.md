@@ -2,18 +2,22 @@
 
 Updates from noobyme:
 
--I have fixed ZRLE DroidVNC NG issues using Claude AI. 
--I have changed rotation default to use plato's function to see which value to use, so that the correct default upright orientation is used. 
--I have added a contingency device detection using /mnt/onboard/.kobo/version instead of using environment variables because starting the tool over ssh does not pass those values. 
--I have also setup touchscreen functionality from plato and rustvnc
--I have copied over the ClaraColor and LibraColor device.rs from plato's latest version, so that those devices may be correctly detected if used, Im unsure if the actual program will work however, but I do know that its possible for an incorrectly detected device to still work.
+I have fixed ZRLE DroidVNC NG issues using Claude AI. 
+
+I have changed rotation default to use plato's function to see which value to use, so that the correct default upright orientation is used. 
+
+I have added a contingency device detection using /mnt/onboard/.kobo/version instead of using environment variables because starting the tool over ssh does not pass those values. 
+
+I have also setup touchscreen functionality from plato and rustvnc.
+
+I have copied over the ClaraColor and LibraColor device.rs from plato's latest version, so that those devices may be correctly detected if used, Im unsure if the actual program will work however, but I do know that its possible for an incorrectly detected device to still work.
 
 The original commit did not have an issue with zrle droidvnc unless it was a debug compile, in which case it would crash after briefly appearing to work due to it being too slow, apparently. Idk for sure I asked claude to help me. The latest commit however does have an issue, zrle droidvnc doesnt work at all. The compiled file provided by anchovy is the oldest commit one, but you cannot rotate the screen with it
 
 From original readme:
 
 A lightweight CLI (command line interface) tool to view a remote screen over VNC, designed to work on eInk screens.
-~~~For now, you can only view, so you'll have to connect a keyboard to the serving computer, or find some other way to interact with it.~~~ There is now touch input.
+~~For now, you can only view, so you'll have to connect a keyboard to the serving computer, or find some other way to interact with it.~~ There is now touch input.
 
 This tool has been confirmed to work on several Kobo devices, such as the Kobo Libra 2 and Elipsa2E, Nia and Glo.
 It was optimized for text based workflows (document reading and writing), doing that it achieves a framerate of 30 fps.
