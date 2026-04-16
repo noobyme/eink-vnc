@@ -23,12 +23,7 @@ killall -q -TERM nickel hindenburg sickel fickel strickel fontickel adobehost fo
 Compilation instructions
 
 To compile on wsl ubuntu noble 24.04, x86_64 CPU
-1 Go to linux user home directory
-2 Clone repository
-3 Download linaro cross toolchain file (the toolchain itself will do no need for sys root file)
-We want gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf.tar.xz
-4 Extract toolchain
-5
+Go to linux user home directory, Clone repository, Download linaro cross toolchain file (the toolchain itself will do no need for sys root file). We want gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf.tar.xzn Extract toolchain. Make cargo directory and config file. Install rustup and target. Build. 
 
 cd /home/noobyme
 git clone https://github.com/everydayanchovies/eink-vnc
@@ -45,9 +40,7 @@ sudo apt-get install rustup
 rustup target add armv7-unknown-linux-gnueabihf
 cargo build --target armv7-unknown-linux-gnueabihf
 
-Done
-
-The first time round I was got an error for these libraries, but seems unneeded,  looks like it was because I had this in the config.
+The first time round I was got an error for these libraries, looks like it was because I had this in the config. 
 rustflags = [
 "-C", "link-arg=--sysroot=/home/noobyme/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf/arm-linux-gnueabihf/libc",
 ]
@@ -88,7 +81,7 @@ cp libz.* libbz2.* libjpeg.* libpng16.* libgumbo.* libopenjp2.* libjbig2dec.* /h
 Note:Copy and pasted commands from AI can fail because formatting differences
 Use AI to help, thats how I successfully compiled it.
 https://www.mobileread.com/forums/showthread.php?t=348481&page=2 Thanks elinkser
-Failed to fill whole buffer? Tightvnc server side blocked ip
+Failed to fill whole buffer error? You messed up somewhere in login credentials or server side ip blocking.
 
 Eh, i didnt realise theres an easier way, using docker, from chatgpt
 Ubuntu 24.04, non WSL
