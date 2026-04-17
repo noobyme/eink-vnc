@@ -14,8 +14,6 @@ I have copied over the ClaraColor and LibraColor device.rs from plato's latest v
 
 The original commit did not have an issue with zrle droidvnc unless it was a debug compile, in which case it would crash after briefly appearing to work due to it being too slow, apparently. Idk for sure I asked claude to help me. The latest commit however does have an issue, zrle droidvnc doesnt work at all. The compiled file provided by anchovy is the oldest commit one, but you cannot rotate the screen with it
 
-From original readme:
-
 A lightweight CLI (command line interface) tool to view a remote screen over VNC, designed to work on eInk screens.
 ~~For now, you can only view, so you'll have to connect a keyboard to the serving computer, or find some other way to interact with it.~~ There is now touch input.
 
