@@ -83,7 +83,7 @@ Failed to fill whole buffer error? You messed up somewhere in login credentials 
 The code responsible for rendering to the eInk display is written by baskerville and taken from https://github.com/baskerville/plato.
 The code responsible for communicating using the VNC protocol is written by whitequark and taken from https://github.com/whitequark/rust-vnc.
 
-##Compilation instructions
+## Compilation instructions
 
 To compile on wsl ubuntu noble 24.04, x86_64 CPU
 Go to linux user home directory, Clone repository, Download linaro cross toolchain file (the toolchain itself will do no need for sys root file). We want gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf.tar.xzn Extract toolchain. Make cargo directory and config file. Add repositories and architecture for armv7, install arm libraries, copy libraries into toolchain directory. Install rustup and target. Build. 
