@@ -35,7 +35,6 @@ use std::slice;
 use std::path::Path;
 use std::sync::mpsc;
 
-
 const FB_DEVICE: &str = "/dev/fb0";
 
 const TOUCH_INPUTS: [&str; 5] = ["/dev/input/by-path/platform-2-0010-event",
@@ -116,6 +115,14 @@ fn main() -> Result<(), Error> {
             .help("rotation (1-4), tested on a Clara HD, try at own risk")
             .long("rotate")
             .takes_value(true),
+        ).arg(
+            Arg::with_name("SCALE")
+                .help("fit to height or width")
+                .long("scale")
+        ).arg(
+            Arg::with_name("LONGTAP")
+                .help("long tap to send right click, for pc servers. not necessary for touchscreen servers")
+                .long("longtap")
         )
         .get_matches();
 
@@ -128,6 +135,8 @@ fn main() -> Result<(), Error> {
     let white_cutoff = value_t!(matches.value_of("WHITECUTOFF"), u8).unwrap_or(255);
     let exclusive = matches.is_present("EXCLUSIVE");
     let rotate = value_t!(matches.value_of("ROTATE"), i8).unwrap_or(CURRENT_DEVICE.startup_rotation());
+    let scale = matches.is_present("SCALE");
+    let longtap = matches.is_present("LONGTAP");
 
     info!("connecting to {}:{}", host, port);
     let stream = match std::net::TcpStream::connect((host, port)) {
@@ -315,49 +324,246 @@ fn main() -> Result<(), Error> {
         }
     });
 
+    // let mut dims_x = CURRENT_DEVICE.dims.1;
+    // let mut dims_y = CURRENT_DEVICE.dims.0;
+    // if CURRENT_DEVICE.should_swap_axes(rotation) {
+    //     //mem::swap(&mut tc.x, &mut tc.y);
+    //     dims_x = CURRENT_DEVICE.dims.0;
+    //     dims_y = CURRENT_DEVICE.dims.1;
+    // }
 
+
+    let mut fit_width:bool = false;
+    let mut fit_height:bool = false;
+    let mut scale_factor:f32 = 1.0;
+    let scaled_resolution:(u32,u32);
+    let total_scaled_pixels:u32;
+    //let src_index_vec:Vec<u32>;
+    let mut src_index_vec: Vec<u32> = Vec::new();
+
+    fn gen_scale_index(input:u32, factor:f32, vnc_width:u16, vnc_height:u16, scaled_res_x:u32,scaled_res_y:u32) -> Vec<u32> {
+        (0..input)
+            .map(|location| {
+                //get location of scaled index from scaled resolution vector, essentially fb width or height, whichever is fit
+                let x_in = location % scaled_res_x; //get remainder
+                let y_in = location / scaled_res_x; //get quotient?
+
+                //get location of original index from original resolution vector, vnc width height
+                // let x_out = (x_in as f32 / factor).floor() as u32; //if OG 500, FIT/FB 1000 =0.5 500*0.5=250 500/0.5=1000
+                // let y_out = (y_in as f32 / factor).floor() as u32; //do opposite of what scale factor does, thus multiply
+
+                let x_out = ((x_in as f32 / factor).floor() as isize)
+                    .clamp(0, vnc_width as isize - 1) as u32;
+
+                let y_out = ((y_in as f32 / factor).floor() as isize)
+                    .clamp(0, vnc_height as isize - 1) as u32;
+
+                let src_index = y_out * vnc_width as u32 + x_out; //vnc width... or fb width? vnc
+
+                src_index
+            }
+        )
+        .collect()
+    }
+    //println!("fbw{:?}fbh{:?}vncw{:?}vnch{:?}",fb.width(),fb.height(),width,height);
+    if scale {
+        if width > height {
+            fit_width = true;
+            scale_factor = fb.width() as f32/width as f32;
+            //scaled_resolution = (fb.width(), (height as f32 * scale_factor) as u32);
+            //total_pixels = fb.width() * width as u32;
+            //total_scaled_pixels = scaled_resolution.0 * scaled_resolution.1;
+            //src_index_vec = gen_scale_index(total_scaled_pixels,scale_factor,width,height,scaled_resolution.0,scaled_resolution.1);
+
+        } else if height > width {
+            fit_height = true;
+            scale_factor = fb.height() as f32/height as f32;
+            // scaled_resolution = ((width as f32 * scale_factor) as u32, fb.height() as u32);
+            // //total_pixels = fb.width() * width as u32;
+            // total_scaled_pixels = scaled_resolution.0 * scaled_resolution.1;
+            // src_index_vec = gen_scale_index(total_scaled_pixels,scale_factor,width,height,scaled_resolution.0,scaled_resolution.1);
+
+        } else if height == width {
+            if fb.height() > fb.width() {
+                fit_width = true;
+                //want to fit to smallest fb axis instead.
+                scale_factor = fb.width() as f32/width as f32;
+                // scaled_resolution = (fb.width(), (height as f32 * scale_factor) as u32);
+                // total_pixels = fb.width() * width as u32;
+                // total_scaled_pixels = scaled_resolution.0 * scaled_resolution.1;
+                // src_index_vec = gen_scale_index(total_scaled_pixels,scale_factor,width,height,scaled_resolution.0,scaled_resolution.1);
+
+            } else {
+                fit_height = true;
+                //want to fit to smallest fb axis instead.
+                scale_factor = fb.height() as f32/height as f32;
+            //     scaled_resolution = ((width as f32 * scale_factor) as u32, fb.height() as u32);
+            //     //total_pixels = fb.width() * width as u32;
+            //     total_scaled_pixels = scaled_resolution.0 * scaled_resolution.1;
+            //     src_index_vec = gen_scale_index(total_scaled_pixels,scale_factor,width,height,scaled_resolution.0,scaled_resolution.1);
+            }
+        };
+    } else {
+    };
+
+    let mut finger_down_count =  Instant::now();
+    let finger_seconds = Duration::from_secs(2);
     'running: loop {
+        // plato_to_vnc_touch(scale_factor,scale,longtap,finger_down_count,finger_seconds);
         if let Ok(evt) = rx.try_recv() {
             match evt {
                 DeviceEvent::Finger { id, time, status, position }  => {
-                    //println!("main dev ev finger{:?} {:?} {:?} {:?}", id, status, position.x as u16,position.y as u16);
                     match id {
                         0 => {
                             match status {
-                                FingerStatus::Up => {
-                                    vnc.send_pointer_event(0x00, position.x as u16, position.y as u16).unwrap();
+                                FingerStatus::Up => {//we only want send right click once we release longtap
+                                    if scale {
+                                        if longtap {
+                                            if finger_down_count.elapsed() > finger_seconds {
+                                                vnc.send_pointer_event(0x04, (position.x as f32 / scale_factor).floor() as u16,  (position.y as f32 / scale_factor).floor() as u16).unwrap();
+                                                vnc.send_pointer_event(0x00, (position.x as f32 / scale_factor).floor() as u16,  (position.y as f32 / scale_factor).floor() as u16).unwrap();
+                                                //println!("LongTap{:?} {:?} {:?} {:?}", id, status, position.x as u16,position.y as u16);
+                                            }
+                                        }
+                                        else {
+                                            vnc.send_pointer_event(0x00, (position.x as f32 / scale_factor).floor() as u16,  (position.y as f32 / scale_factor).floor() as u16).unwrap();
+                                            // println!("NoLongTap{:?} {:?} {:?} {:?}", id, status, position.x as u16,position.y as u16);
+                                            // println!("Up{:?},{:?}",finger_down_count,longtap);
+                                        }
+                                    } else {
+                                        if longtap {
+                                            if finger_down_count.elapsed() > finger_seconds {
+                                                vnc.send_pointer_event(0x04, position.x as u16, position.y as u16).unwrap();
+                                                vnc.send_pointer_event(0x00, position.x as u16, position.y as u16).unwrap();
+                                                //println!("LongTap{:?} {:?} {:?} {:?}", id, status, position.x as u16,position.y as u16);
+                                            }
+                                        }
+                                        else {
+                                            vnc.send_pointer_event(0x00, position.x as u16, position.y as u16).unwrap();
+                                            // println!("NoLongTap{:?} {:?} {:?} {:?}", id, status, position.x as u16,position.y as u16);
+                                            // println!("Up{:?},{:?}",finger_down_count,longtap);
+                                        }
+                                    };
+
                                 },
                                 FingerStatus::Down => {
-                                    vnc.send_pointer_event(0x01, position.x as u16, position.y as u16).unwrap();
+                                    if scale {
+                                        vnc.send_pointer_event(0x01, (position.x as f32 / scale_factor).floor() as u16,  (position.y as f32 / scale_factor).floor() as u16).unwrap();
+                                        finger_down_count = Instant::now();
+                                    } else {
+                                        vnc.send_pointer_event(0x01, position.x as u16, position.y as u16).unwrap();
+                                        finger_down_count = Instant::now();
+                                    }
+
                                 },
                                 FingerStatus::Motion => {
-                                    vnc.send_pointer_event(0x01, position.x as u16, position.y as u16).unwrap();
+                                    if scale {
+                                        vnc.send_pointer_event(0x01, (position.x as f32 / scale_factor).floor() as u16,  (position.y as f32 / scale_factor).floor() as u16).unwrap();
+                                    } else {
+                                        vnc.send_pointer_event(0x01, position.x as u16, position.y as u16).unwrap();
+                                    }
                                 },
                             }
                         },
                         1 => {
                             match status {
-                                FingerStatus::Up => {
-                                    vnc.send_pointer_event(0x00, position.x as u16, position.y as u16).unwrap();
+                                FingerStatus::Up => {//we only want send right click once we release longtap
+                                    if scale {
+                                        if longtap {
+                                            if finger_down_count.elapsed() > finger_seconds {
+                                                vnc.send_pointer_event(0x04, (position.x as f32 / scale_factor).floor() as u16,  (position.y as f32 / scale_factor).floor() as u16).unwrap();
+                                                vnc.send_pointer_event(0x00, (position.x as f32 / scale_factor).floor() as u16,  (position.y as f32 / scale_factor).floor() as u16).unwrap();
+                                                //println!("LongTap{:?} {:?} {:?} {:?}", id, status, position.x as u16,position.y as u16);
+                                            }
+                                        }
+                                        else {
+                                            vnc.send_pointer_event(0x00, (position.x as f32 / scale_factor).floor() as u16,  (position.y as f32 / scale_factor).floor() as u16).unwrap();
+                                            // println!("NoLongTap{:?} {:?} {:?} {:?}", id, status, position.x as u16,position.y as u16);
+                                            // println!("Up{:?},{:?}",finger_down_count,longtap);
+                                        }
+                                    } else {
+                                        if longtap {
+                                            if finger_down_count.elapsed() > finger_seconds {
+                                                vnc.send_pointer_event(0x04, position.x as u16, position.y as u16).unwrap();
+                                                vnc.send_pointer_event(0x00, position.x as u16, position.y as u16).unwrap();
+                                                //println!("LongTap{:?} {:?} {:?} {:?}", id, status, position.x as u16,position.y as u16);
+                                            }
+                                        }
+                                        else {
+                                            vnc.send_pointer_event(0x00, position.x as u16, position.y as u16).unwrap();
+                                            // println!("NoLongTap{:?} {:?} {:?} {:?}", id, status, position.x as u16,position.y as u16);
+                                            // println!("Up{:?},{:?}",finger_down_count,longtap);
+                                        }
+                                    };
+
                                 },
                                 FingerStatus::Down => {
-                                    vnc.send_pointer_event(0x01, position.x as u16, position.y as u16).unwrap();
+                                    if scale {
+                                        vnc.send_pointer_event(0x01, (position.x as f32 / scale_factor).floor() as u16,  (position.y as f32 / scale_factor).floor() as u16).unwrap();
+                                        finger_down_count = Instant::now();
+                                    } else {
+                                        vnc.send_pointer_event(0x01, position.x as u16, position.y as u16).unwrap();
+                                        finger_down_count = Instant::now();
+                                    }
+
                                 },
                                 FingerStatus::Motion => {
-                                    vnc.send_pointer_event(0x01, position.x as u16, position.y as u16).unwrap();
+                                    if scale {
+                                        vnc.send_pointer_event(0x01, (position.x as f32 / scale_factor).floor() as u16,  (position.y as f32 / scale_factor).floor() as u16).unwrap();
+                                    } else {
+                                        vnc.send_pointer_event(0x01, position.x as u16, position.y as u16).unwrap();
+                                    }
                                 },
                             }
                         },
                         2 => {
                             match status {
-                                FingerStatus::Up => {
-                                    vnc.send_pointer_event(0x00, position.x as u16, position.y as u16).unwrap();
+                                FingerStatus::Up => {//we only want send right click once we release longtap
+                                    if scale {
+                                        if longtap {
+                                            if finger_down_count.elapsed() > finger_seconds {
+                                                vnc.send_pointer_event(0x04, (position.x as f32 / scale_factor).floor() as u16,  (position.y as f32 / scale_factor).floor() as u16).unwrap();
+                                                vnc.send_pointer_event(0x00, (position.x as f32 / scale_factor).floor() as u16,  (position.y as f32 / scale_factor).floor() as u16).unwrap();
+                                                //println!("LongTap{:?} {:?} {:?} {:?}", id, status, position.x as u16,position.y as u16);
+                                            }
+                                        }
+                                        else {
+                                            vnc.send_pointer_event(0x00, (position.x as f32 / scale_factor).floor() as u16,  (position.y as f32 / scale_factor).floor() as u16).unwrap();
+                                            // println!("NoLongTap{:?} {:?} {:?} {:?}", id, status, position.x as u16,position.y as u16);
+                                            // println!("Up{:?},{:?}",finger_down_count,longtap);
+                                        }
+                                    } else {
+                                        if longtap {
+                                            if finger_down_count.elapsed() > finger_seconds {
+                                                vnc.send_pointer_event(0x04, position.x as u16, position.y as u16).unwrap();
+                                                vnc.send_pointer_event(0x00, position.x as u16, position.y as u16).unwrap();
+                                                //println!("LongTap{:?} {:?} {:?} {:?}", id, status, position.x as u16,position.y as u16);
+                                            }
+                                        }
+                                        else {
+                                            vnc.send_pointer_event(0x00, position.x as u16, position.y as u16).unwrap();
+                                            // println!("NoLongTap{:?} {:?} {:?} {:?}", id, status, position.x as u16,position.y as u16);
+                                            // println!("Up{:?},{:?}",finger_down_count,longtap);
+                                        }
+                                    };
+
                                 },
                                 FingerStatus::Down => {
-                                    vnc.send_pointer_event(0x01, position.x as u16, position.y as u16).unwrap();
+                                    if scale {
+                                        vnc.send_pointer_event(0x01, (position.x as f32 / scale_factor).floor() as u16,  (position.y as f32 / scale_factor).floor() as u16).unwrap();
+                                        finger_down_count = Instant::now();
+                                    } else {
+                                        vnc.send_pointer_event(0x01, position.x as u16, position.y as u16).unwrap();
+                                        finger_down_count = Instant::now();
+                                    }
+
                                 },
                                 FingerStatus::Motion => {
-                                    vnc.send_pointer_event(0x01, position.x as u16, position.y as u16).unwrap();
+                                    if scale {
+                                        vnc.send_pointer_event(0x01, (position.x as f32 / scale_factor).floor() as u16,  (position.y as f32 / scale_factor).floor() as u16).unwrap();
+                                    } else {
+                                        vnc.send_pointer_event(0x01, position.x as u16, position.y as u16).unwrap();
+                                    }
                                 },
                             }
                         },
@@ -389,111 +595,301 @@ fn main() -> Result<(), Error> {
                 Event::PutPixels(vnc_rect, ref pixels) => {
                     debug!("Put pixels");
 
+
                     let elapsed_ms = time_at_sol.elapsed().as_millis();
                     debug!("network Δt: {}", elapsed_ms);
 
-                    // Single pass: convert to grayscale + apply post-processing LUT.
-                    // Use the current negotiated format (may have changed via set_format).
                     let bpp = current_format.bits_per_pixel as usize / 8;
-                    let gray_pixels: Vec<u8> = if bpp >= 3 {
-                        // 32bpp or 24bpp: compute luminance from RGB channels.
-                        // Server bytes: [R, G, B, ...] (red_shift=0, green_shift=8, blue_shift=16)
-                        pixels
-                            .chunks_exact(bpp)
-                            .map(|p| {
-                                let luma = (p[0] as u32 * 299
-                                    + p[1] as u32 * 587
-                                    + p[2] as u32 * 114)
-                                    / 1000;
-                                post_proc_bin.data[luma as usize]
-                            })
-                            .collect()
-                    } else {
-                        // 8bpp: each byte is already a single-channel value, apply LUT directly.
-                        pixels
+
+                    //println!("VNCRW{:?}VNCRH{:?}TOTALPIX{:?}BPP{:?}",vnc_rect.width,vnc_rect.height,pixels.len(),bpp);
+
+                    //turns into bytes i see, bits to bytes
+                    // let scale_down =
+                    //     pixels
+                    //         .chunks_exact(bpp)
+                    //         .map(|p|)
+                    //         .collect();
+                    if scale {
+                        let mut vnc_rect_index:Vec<u32>= Vec::new();
+                        if ((vnc_rect.width as f32)*scale_factor).floor() as u32 == 0
+                            || ((vnc_rect.height as f32)*scale_factor).floor() as u32 == 0 {
+                            continue;
+                            //println!("SKIP,TOTAL{:?}SF{:?}VNC_RW{:?}VNC_RH{:?}VNCRSW{:?}VNCRSH{:?}",(pixels.len()/bpp) as u32,
+                            //          scale_factor, vnc_rect.width, vnc_rect.height,
+                            //          ((vnc_rect.width as f32)*scale_factor) as u32,
+                            //          ((vnc_rect.height as f32)*scale_factor) as u32);
+                        } else {
+                            vnc_rect_index = gen_scale_index((((vnc_rect.width as f32)*scale_factor).floor()*((vnc_rect.height as f32)*scale_factor).floor()) as u32
+                                                             /*(pixels.len()/bpp) as u32*/,
+                                                                 scale_factor, vnc_rect.width, vnc_rect.height,
+                                                                 ((vnc_rect.width as f32)*scale_factor).floor() as u32,
+                                                                 ((vnc_rect.height as f32)*scale_factor).floor() as u32);
+                        };
+
+                        // println!("TOTAL{:?}SF{:?}VNC_RW{:?}VNC_RH{:?}VNCRSW{:?}VNCRSH{:?}",(pixels.len()/bpp) as u32,
+                        //          scale_factor, vnc_rect.width, vnc_rect.height,
+                        //          ((vnc_rect.width as f32)*scale_factor).floor() as u32,
+                        //          ((vnc_rect.height as f32)*scale_factor).floor() as u32);
+
+                        let gray_pixels: Vec<u8> = vnc_rect_index
                             .iter()
-                            .map(|&c| post_proc_bin.data[c as usize])
-                            .collect()
-                    };
+                            .map(|i| {
+                                let base = (*i as usize) * bpp;
+                                //original only sampled blue, is it faster?
+                                let luma = if bpp >= 3 {
+                                    (pixels[base] as u32 * 299 //B?
+                                        + pixels[base + 1] as u32 * 587 //G?
+                                        + pixels[base + 2] as u32 * 114) / 1000 //R?
+                                } else {
+                                    pixels[base] as u32
+                                    //bpp is bytes not bits
+                                    //if only 2 or 4 level color... then luma = base?
+                                    //means each RGB value has 8 bits, 256 levels of red green or blue for each pixel?
+                                    //if only 2 bits, then red level is either 1,2,3 or 4?.
+                                    //no, entire pixel itself only has 4 colors, 1,2,3 or 4.
+                                    //so +1 means add one byte, because pixels is a &[u8]
+                                    //1bpp is 8 bit, 2 is 16bit, 3 is 24 bit, 4 is 32bit.
+                                };
 
-                    let w = vnc_rect.width as u32;
-                    let h = vnc_rect.height as u32;
-                    let l = vnc_rect.left as u32;
-                    let t = vnc_rect.top as u32;
+                                post_proc_bin.data[luma as usize]//0-255 values, check
+                                //postproc bin what value returns? applies filter defined by cli flags
+                            })
+                            .collect();
 
-                    let elapsed_ms = time_at_sol.elapsed().as_millis();
-                    debug!("postproc Δt: {}", elapsed_ms);
+                        //      let gray_pixels: Vec<u8> = if bpp >= 3 {
+                        //     // 32bpp or 24bpp: compute luminance from RGB channels.
+                        //     // Server bytes: [R, G, B, ...] (red_shift=0, green_shift=8, blue_shift=16)
+                        //     pixels
+                        //         .chunks_exact(bpp)
+                        //         .map(|p| {
+                        //             let luma = (p[0] as u32 * 299
+                        //                 + p[1] as u32 * 587
+                        //                 + p[2] as u32 * 114)
+                        //                 / 1000;
+                        //             post_proc_bin.data[luma as usize]
+                        //         })
+                        //         .collect()
+                        // } else {
+                        //     // 8bpp: each byte is already a single-channel value, apply LUT directly.
+                        //     pixels
+                        //         .iter()
+                        //         .map(|&c| post_proc_bin.data[c as usize])
+                        //         .collect()
+                        // };
 
-                    #[cfg(feature = "eink_device")]
-                    {
-                        fb.draw_gray_tile(l, t, w, h, &gray_pixels);
-                    }
+                        let w = (vnc_rect.width as f32 * scale_factor).floor() as u32;
+                        let h = (vnc_rect.height as f32 * scale_factor).floor() as u32;
+                        let l = (vnc_rect.left as f32 * scale_factor).floor() as u32;
+                        let t = (vnc_rect.top as f32 * scale_factor).floor() as u32;
 
-                    let elapsed_ms = time_at_sol.elapsed().as_millis();
-                    debug!("draw Δt: {}", elapsed_ms);
-
-                    let w = vnc_rect.width as i32;
-                    let h = vnc_rect.height as i32;
-                    let l = vnc_rect.left as i32;
-                    let t = vnc_rect.top as i32;
-
-                    let delta_rect = rect![l, t, l + w, t + h];
-                    if delta_rect == fb_rect {
-                        dirty_rects.clear();
-                        dirty_rects_since_refresh.clear();
+                        let elapsed_ms = time_at_sol.elapsed().as_millis();
+                        debug!("postproc Δt: {}", elapsed_ms);
+                        //println!("W{:?}H{:?}L{:?}T{:?}GPLEN{:?}",w,h,l,t,gray_pixels.len());
+                        // dbg!(vnc_rect_index.len());
                         #[cfg(feature = "eink_device")]
                         {
-                            if !has_drawn_once || dirty_update_count > MAX_DIRTY_REFRESHES {
-                                fb.update(&fb_rect, UpdateMode::Full).ok();
-                                dirty_update_count = 0;
-                                has_drawn_once = true;
-                            } else {
-                                fb.update(&fb_rect, UpdateMode::Partial).ok();
-                            }
+                            fb.draw_gray_tile(l, t, w, h, &gray_pixels);
+                            //draw gray_tile merely creates grayscale pixel vec, does not do drawing?
+                            //actual pixel updating happens in client.rs fb.update method
                         }
-                    } else {
-                        push_to_dirty_rect_list(&mut dirty_rects, delta_rect);
-                    }
+                        //there is no coord to say, draw rect at location. instead each pixel is drawn one by one...
 
-                    let elapsed_ms = time_at_sol.elapsed().as_millis();
-                    debug!("rects Δt: {}", elapsed_ms);
+                        let elapsed_ms = time_at_sol.elapsed().as_millis();
+                        debug!("draw Δt: {}", elapsed_ms);
+
+                        let w = (vnc_rect.width as f32 * scale_factor).floor() as i32;
+                        let h = (vnc_rect.height as f32 * scale_factor).floor() as i32;
+                        let l = (vnc_rect.left as f32 * scale_factor).floor() as i32;
+                        let t = (vnc_rect.top as f32 * scale_factor).floor() as i32;
+
+
+                        let delta_rect = rect![l, t, l + w, t + h];
+                        if delta_rect == fb_rect {
+                            dirty_rects.clear();
+                            dirty_rects_since_refresh.clear();
+                            #[cfg(feature = "eink_device")]
+                            {
+                                if !has_drawn_once || dirty_update_count > MAX_DIRTY_REFRESHES {
+                                    fb.update(&fb_rect, UpdateMode::Full).ok();
+                                    dirty_update_count = 0;
+                                    has_drawn_once = true;
+                                } else {
+                                    fb.update(&fb_rect, UpdateMode::Partial).ok();
+                                }
+                            }
+                        } else {
+                            push_to_dirty_rect_list(&mut dirty_rects, delta_rect);
+                        }
+
+                        let elapsed_ms = time_at_sol.elapsed().as_millis();
+                        debug!("rects Δt: {}", elapsed_ms);
+                    } else {
+                        let gray_pixels: Vec<u8> = if bpp >= 3 {
+                            // 32bpp or 24bpp: compute luminance from RGB channels.
+                            // Server bytes: [R, G, B, ...] (red_shift=0, green_shift=8, blue_shift=16)
+                            pixels
+                                .chunks_exact(bpp)
+                                .map(|p| {
+                                    let luma = (p[0] as u32 * 299
+                                        + p[1] as u32 * 587
+                                        + p[2] as u32 * 114)
+                                        / 1000;
+                                    post_proc_bin.data[luma as usize]
+                                })
+                                .collect()
+                        } else {
+                            // 8bpp: each byte is already a single-channel value, apply LUT directly.
+                            pixels
+                                .iter()
+                                .map(|&c| post_proc_bin.data[c as usize])
+                                .collect()
+                        };
+
+                        let w = vnc_rect.width as u32;
+                        let h = vnc_rect.height as u32;
+                        let l = vnc_rect.left as u32;
+                        let t = vnc_rect.top as u32;
+
+                        let elapsed_ms = time_at_sol.elapsed().as_millis();
+                        debug!("postproc Δt: {}", elapsed_ms);
+
+                        #[cfg(feature = "eink_device")]
+                        {
+                            fb.draw_gray_tile(l, t, w, h, &gray_pixels);
+                            //draw gray_tile merely creates grayscale pixel vec, does not do drawing?
+                            //actual pixel updating happens in client.rs fb.update method
+                        }
+                        //there is no coord to say, draw rect at location. instead each pixel is drawn one by one into fb...
+                        //and then update called separately
+
+                        let elapsed_ms = time_at_sol.elapsed().as_millis();
+                        debug!("draw Δt: {}", elapsed_ms);
+
+                        let w = vnc_rect.width as i32;
+                        let h = vnc_rect.height as i32;
+                        let l = vnc_rect.left as i32;
+                        let t = vnc_rect.top as i32;
+
+                        let delta_rect = rect![l, t, l + w, t + h];
+                        if delta_rect == fb_rect {
+                            dirty_rects.clear();
+                            dirty_rects_since_refresh.clear();
+                            #[cfg(feature = "eink_device")]
+                            {
+                                if !has_drawn_once || dirty_update_count > MAX_DIRTY_REFRESHES {
+                                    fb.update(&fb_rect, UpdateMode::Full).ok();
+                                    dirty_update_count = 0;
+                                    has_drawn_once = true;
+                                } else {
+                                    fb.update(&fb_rect, UpdateMode::Partial).ok();
+                                }
+                            }
+                        } else {
+                            push_to_dirty_rect_list(&mut dirty_rects, delta_rect);
+                        }
+
+                        let elapsed_ms = time_at_sol.elapsed().as_millis();
+                        debug!("rects Δt: {}", elapsed_ms);
+                    };
+                    // Single pass: convert to grayscale + apply post-processing LUT.
+                    // Use the current negotiated format (may have changed via set_format).
+
                 }
+
                 Event::CopyPixels { src, dst } => {
                     debug!("Copy pixels!");
 
                     #[cfg(feature = "eink_device")]
                     {
-                        let src_left = src.left as u32;
-                        let src_top = src.top as u32;
+                        // if scale {
+                        //     let vnc_rect_index:Vec<u32>= Vec::new();
+                        //     if ((vnc_rect.width as f32)*scale_factor).floor() as u32 == 0
+                        //         || ((vnc_rect.height as f32)*scale_factor).floor() as u32 == 0 {
+                        //         continue;
+                        //         println!("SKIP,TOTAL{:?}SF{:?}VNC_RW{:?}VNC_RH{:?}VNCRSW{:?}VNCRSH{:?}",(pixels.len()/bpp) as u32,
+                        //                  scale_factor, vnc_rect.width, vnc_rect.height,
+                        //                  ((vnc_rect.width as f32)*scale_factor) as u32,
+                        //                  ((vnc_rect.height as f32)*scale_factor) as u32);
+                        //     } else {
+                        //         let vnc_rect_index = gen_scale_index((pixels.len()/bpp) as u32,
+                        //                                              scale_factor, vnc_rect.width, vnc_rect.height,
+                        //                                              ((vnc_rect.width as f32)*scale_factor) as u32,
+                        //                                              ((vnc_rect.height as f32)*scale_factor) as u32);
+                        //     };
+                        if scale {
+                            {
+                                if (src.width as f32 * scale_factor).floor() as u32 == 0 ||
+                                    (src.height as f32 * scale_factor).floor() as u32 == 0 {
+                                    continue
+                                }
 
-                        let dst_left = dst.left as u32;
-                        let dst_top = dst.top as u32;
+                                let src_left = (src.left as f32 * scale_factor).floor() as u32;
+                                let src_top = (src.top as f32 * scale_factor).floor() as u32;
 
-                        let mut intermediary_pixmap =
-                            Pixmap::new(dst.width as u32, dst.height as u32);
+                                let dst_left = (dst.left as f32 * scale_factor).floor() as u32;
+                                let dst_top = (dst.top as f32 * scale_factor).floor() as u32;
 
-                        for y in 0..intermediary_pixmap.height {
-                            for x in 0..intermediary_pixmap.width {
-                                let color = fb.get_pixel(src_left + x, src_top + y);
-                                intermediary_pixmap.set_pixel(x, y, color);
+                                let mut intermediary_pixmap =
+                                    Pixmap::new((dst.width as f32*scale_factor).floor() as u32, (dst.height as f32*scale_factor).floor() as u32);
+
+                                for y in 0..intermediary_pixmap.height {
+                                    for x in 0..intermediary_pixmap.width {
+                                        let color = fb.get_pixel(src_left + x, src_top + y);
+                                        intermediary_pixmap.set_pixel(x, y, color);
+                                    }
+                                }
+
+                                for y in 0..intermediary_pixmap.height {
+                                    for x in 0..intermediary_pixmap.width {
+                                        let color = intermediary_pixmap.get_pixel(x, y);
+                                        fb.set_pixel(dst_left + x, dst_top + y, color);
+                                    }
+                                }
                             }
-                        }
 
-                        for y in 0..intermediary_pixmap.height {
-                            for x in 0..intermediary_pixmap.width {
-                                let color = intermediary_pixmap.get_pixel(x, y);
-                                fb.set_pixel(dst_left + x, dst_top + y, color);
+                            let delta_rect = rect![
+                        (dst.left as f32 * scale_factor).floor() as i32,
+                        (dst.top as f32 * scale_factor).floor() as i32,
+                        ((dst.left as f32 * scale_factor).floor() + dst.width as f32) as i32,
+                        ((dst.top as f32 * scale_factor).floor() + dst.height as f32) as i32
+                        ];
+                            push_to_dirty_rect_list(&mut dirty_rects, delta_rect);
+
+                        } else {
+                            {
+                                let src_left = src.left as u32;
+                                let src_top = src.top as u32;
+
+                                let dst_left = dst.left as u32;
+                                let dst_top = dst.top as u32;
+
+                                let mut intermediary_pixmap =
+                                    Pixmap::new(dst.width as u32, dst.height as u32);
+
+                                for y in 0..intermediary_pixmap.height {
+                                    for x in 0..intermediary_pixmap.width {
+                                        let color = fb.get_pixel(src_left + x, src_top + y);
+                                        intermediary_pixmap.set_pixel(x, y, color);
+                                    }
+                                }
+
+                                for y in 0..intermediary_pixmap.height {
+                                    for x in 0..intermediary_pixmap.width {
+                                        let color = intermediary_pixmap.get_pixel(x, y);
+                                        fb.set_pixel(dst_left + x, dst_top + y, color);
+                                    }
+                                }
                             }
-                        }
-                    }
 
-                    let delta_rect = rect![
+                            let delta_rect = rect![
                         dst.left as i32,
                         dst.top as i32,
                         (dst.left + dst.width) as i32,
                         (dst.top + dst.height) as i32
                     ];
-                    push_to_dirty_rect_list(&mut dirty_rects, delta_rect);
+                            push_to_dirty_rect_list(&mut dirty_rects, delta_rect);
+                        };
+                    }
                 }
                 Event::EndOfFrame => {
                     debug!("End of frame!");
