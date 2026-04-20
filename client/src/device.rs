@@ -1,12 +1,14 @@
-use std::env;
+use std::{env, fs};
 use std::fmt;
 use lazy_static::lazy_static;
 use crate::input::TouchProto;
 
+use std::fs::File;
+use std::io::Read;
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Model {
-    LibraColour,
-    ClaraColour,
+    LibraColor,
+    ClaraColor,
     ClaraBW,
     Elipsa2E,
     Clara2E,
@@ -42,7 +44,7 @@ pub enum Orientation {
 }
 
 impl fmt::Display for Model {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { //fmt::Formatter is a struct from fmt crate
         match *self {
             Model::LibraColour   => write!(f, "Libra Colour"),
             Model::ClaraColour   => write!(f, "Clara Colour"),
@@ -79,7 +81,7 @@ impl fmt::Display for Model {
 #[derive(Debug)]
 pub struct Device {
     pub model: Model,
-    pub proto: TouchProto,
+    pub proto: TouchProto, //defined struct elsewhere
     pub dims: (u32, u32),
     pub dpi: u16,
 }
@@ -91,10 +93,10 @@ pub enum FrontlightKind {
     Premixed,
 }
 
-impl Device {
-    pub fn new(product: &str, model_number: &str) -> Device {
+impl Device { //for all device enums implment this function
+    pub fn new(product: &str, model_number: &str) -> Device { //when called, u must provide product and model number?
         match product {
-            "kraken" => Device {
+            "kraken" => Device {//struct called Device? initiating struct but no variale name? idk
                 model: Model::Glo,
                 proto: TouchProto::Single,
                 dims: (758, 1024),
@@ -208,7 +210,7 @@ impl Device {
                 dims: (1404, 1872),
                 dpi: 227,
             },
-            "spaBW" | "spaBWTPV" => Device {
+            "spaBW" => Device {
                 model: Model::ClaraBW,
                 proto: TouchProto::MultiB,
                 dims: (1072, 1448),
@@ -226,11 +228,164 @@ impl Device {
                 dims: (1264, 1680),
                 dpi: 300,
             },
-            _ => Device {
-                model: if model_number == "320" { Model::TouchC } else { Model::TouchAB },
-                proto: TouchProto::Single,
-                dims: (600, 800),
-                dpi: 167,
+            _ => {
+                let content = fs::read_to_string("/mnt/onboard/.kobo/version").unwrap_or_else(|_| String::new());
+                let first_four: String = content.chars().take(4).collect();
+
+                println!("{}", first_four);
+
+                match first_four.as_str() {
+                    "N613" => Device {//struct called Device? initiating struct but no variale name? idk
+                        model: Model::Glo,
+                        proto: TouchProto::Single,
+                        dims: (758, 1024),
+                        dpi: 212,
+                    },
+                    "N705" => Device {
+                        model: Model::Mini,
+                        proto: TouchProto::Single,
+                        dims: (600, 800),
+                        dpi: 200,
+                    },
+                    "N204B" => Device {
+                        model: Model::AuraHD,
+                        proto: TouchProto::Single,
+                        dims: (1080, 1440),
+                        dpi: 265,
+                    },
+                    "N514" => Device {
+                        model: Model::Aura,
+                        proto: TouchProto::MultiA,
+                        dims: (758, 1024),
+                        dpi: 212,
+                    },
+                    "N250" => Device {
+                        model: Model::AuraH2O,
+                        proto: TouchProto::MultiA,
+                        dims: (1080, 1440),
+                        dpi: 265,
+                    },
+                    "N437" => Device {
+                        model: Model::GloHD,
+                        proto: TouchProto::MultiA,
+                        dims: (1072, 1448),
+                        dpi: 300,
+                    },
+                    "N587" => Device {
+                        model: Model::Touch2,
+                        proto: TouchProto::MultiA,
+                        dims: (600, 800),
+                        dpi: 167,
+                    },
+                    "N709" => Device {
+                        model: if model_number == "381" { Model::AuraONELimEd } else { Model::AuraONE },
+                        proto: TouchProto::MultiA,
+                        dims: (1404, 1872),
+                        dpi: 300,
+                    },
+                    "N236" => Device {
+                        model: if model_number == "379" { Model::AuraEd2V2 } else { Model::AuraEd2V1 },
+                        proto: TouchProto::MultiA,
+                        dims: (758, 1024),
+                        dpi: 212,
+                    },
+                    "N867" => Device {
+                        model: if model_number == "378" { Model::AuraH2OEd2V2 } else { Model::AuraH2OEd2V1 },
+                        proto: TouchProto::MultiB,
+                        dims: (1080, 1440),
+                        dpi: 265,
+                    },
+                    "N249" => Device {
+                        model: Model::ClaraHD,
+                        proto: TouchProto::MultiB,
+                        dims: (1072, 1448),
+                        dpi: 300,
+                    },
+                    "N782" => Device {
+                        model: if model_number == "380" { Model::Forma32GB } else { Model::Forma },
+                        proto: TouchProto::MultiB,
+                        dims: (1440, 1920),
+                        dpi: 300,
+                    },
+                    "N873" => Device {
+                        model: Model::LibraH2O,
+                        proto: TouchProto::MultiB,
+                        dims: (1264, 1680),
+                        dpi: 300,
+                    },
+                    "N306" => Device {
+                        model: Model::Nia,
+                        proto: TouchProto::MultiA,
+                        dims: (758, 1024),
+                        dpi: 212,
+                    },
+                    "N604" => Device {
+                        model: Model::Elipsa,
+                        proto: TouchProto::MultiC,
+                        dims: (1404, 1872),
+                        dpi: 227,
+                    },
+                    "N778" => Device {
+                        model: Model::Sage,
+                        proto: TouchProto::MultiC,
+                        dims: (1440, 1920),
+                        dpi: 300,
+                    },
+                    "N418" => Device {
+                        model: Model::Libra2,
+                        proto: TouchProto::MultiC,
+                        dims: (1264, 1680),
+                        dpi: 300,
+                    },
+                    "N506" => Device {
+                        model: Model::Clara2E,
+                        proto: TouchProto::MultiB,
+                        dims: (1072, 1448),
+                        dpi: 300,
+                    },
+                    "N605" => Device {
+                        model: Model::Elipsa2E,
+                        proto: TouchProto::MultiC,
+                        dims: (1404, 1872),
+                        dpi: 227,
+                    },
+                    "N365" => Device {
+                        model: Model::ClaraBW,
+                        proto: TouchProto::MultiB,
+                        dims: (1072, 1448),
+                        dpi: 300,
+                    },
+                    "P365" => Device {
+                        model: Model::ClaraBW,
+                        proto: TouchProto::MultiB,
+                        dims: (1072, 1448),
+                        dpi: 300,
+                    },
+                    "N905" => Device {
+                        model: if model_number == "320" { Model::TouchC } else { Model::TouchAB },
+                        proto: TouchProto::Single,
+                        dims: (600, 800),
+                        dpi: 167,
+                    },
+                    "N367" => Device {
+                        model: Model::ClaraColour,
+                        proto: TouchProto::MultiB,
+                        dims: (1072, 1448),
+                        dpi: 300,
+                    },
+                    "N428" => Device {
+                        model: Model::LibraColour,
+                        proto: TouchProto::MultiB,
+                        dims: (1264, 1680),
+                        dpi: 300,
+                    },
+                    _ => Device {
+                        model: Model::ClaraBW,
+                        proto: TouchProto::MultiB,
+                        dims: (1072, 1448),
+                        dpi: 300,
+                    },
+                }
             },
         }
     }
@@ -242,8 +397,13 @@ impl Device {
         }
     }
 
+
     pub fn frontlight_kind(&self) -> FrontlightKind {
         match self.model {
+            Model::AuraONE |
+            Model::AuraONELimEd |
+            Model::AuraH2OEd2V1 |
+            Model::AuraH2OEd2V2 => FrontlightKind::Natural,
             Model::ClaraHD |
             Model::Forma |
             Model::Forma32GB |
@@ -255,11 +415,7 @@ impl Device {
             Model::ClaraBW |
             Model::ClaraColour |
             Model::LibraColour => FrontlightKind::Premixed,
-            Model::AuraONE |
-            Model::AuraONELimEd |
-            Model::AuraH2OEd2V1 |
-            Model::AuraH2OEd2V2 => FrontlightKind::Natural,
-            _ => FrontlightKind::Standard,
+            _ => FrontlightKind::Standard, //rest
         }
     }
 
@@ -274,8 +430,8 @@ impl Device {
 
     pub fn has_gyroscope(&self) -> bool {
         matches!(self.model,
-                 Model::Forma | Model::Forma32GB | Model::LibraH2O | Model::Elipsa |
-                 Model::Sage | Model::Libra2 | Model::Elipsa2E | Model::LibraColour)
+                 Model::Forma | Model::Forma32GB | Model::LibraH2O |
+                 Model::Elipsa | Model::Sage | Model::Libra2 | Model::Elipsa2E | Model::LibraColour)
     }
 
     pub fn has_page_turn_buttons(&self) -> bool {
@@ -295,11 +451,15 @@ impl Device {
     }
 
     pub fn should_invert_buttons(&self, rotation: i8) -> bool {
-        let sr = self.startup_rotation();
-        let (_, dir) = self.mirroring_scheme();
+        let sr = self.startup_rotation();//default upright rotation value, usually 1 or 3
+        let (_, dir) = self.mirroring_scheme();//mirroring scheme for devices with rotation?
+        //dir values is either 1 or -1
 
         rotation == (4 + sr - dir) % 4 || rotation == (4 + sr - 2 * dir) % 4
-    }
+    } //thus 4+1-(1)=4 /4=0 or 4+1-(-1)=6/4=2 4+3-(1)=6/4=2 4+3-(-1)=8/4=0
+    //somehow returns a boolen? ah if rotation == parameter given. this only applies to ones with buttons he
+    //since function is never called ill never know what rotation parameter is
+
 
     pub fn orientation(&self, rotation: i8) -> Orientation {
         if self.should_swap_axes(rotation) {
@@ -343,9 +503,9 @@ impl Device {
     }
 
     pub fn should_mirror_axes(&self, rotation: i8) -> (bool, bool) {
-        let (mxy, dir) = self.mirroring_scheme();
-        let mx = (4 + (mxy + dir)) % 4;
-        let my = (4 + (mxy - dir)) % 4;
+        let (mxy, dir) = self.mirroring_scheme(); //eg libra2 3,1
+        let mx = (4 + (mxy + dir)) % 4; //4+3+1=8%4=0
+        let my = (4 + (mxy - dir)) % 4; //4+3-1=6%4=2
         let mirror_x = mxy == rotation || mx == rotation;
         let mirror_y = mxy == rotation || my == rotation;
         (mirror_x, mirror_y)
@@ -363,6 +523,7 @@ impl Device {
             _ => (2, 1),
         }
     }
+    //this is for devices... with rotation enabled?,inv portrqit?
 
     pub fn should_swap_axes(&self, rotation: i8) -> bool {
         rotation % 2 == self.swapping_scheme()
@@ -382,8 +543,8 @@ impl Device {
             Model::LibraH2O => 0,
             Model::AuraH2OEd2V1 |
             Model::Forma | Model::Forma32GB |
-            Model::Sage | Model::Libra2 | Model::Elipsa2E |
-            Model::LibraColour => 1,
+            Model::Sage | Model::Libra2 | Model::Elipsa2E
+            | Model::LibraColour => 1,
             _ => 3,
         }
     }
