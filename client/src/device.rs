@@ -7,8 +7,8 @@ use std::fs::File;
 use std::io::Read;
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Model {
-    LibraColor,
-    ClaraColor,
+    LibraColour,
+    ClaraColour,
     ClaraBW,
     Elipsa2E,
     Clara2E,
