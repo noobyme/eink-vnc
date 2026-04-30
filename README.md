@@ -8,9 +8,11 @@ I am heavily assisted by AI.
 - I have changed rotation default to use plato's function
 - I have added a contingency device detection using /mnt/onboard/.kobo/version instead of using environment variables because starting the tool over ssh does not pass those values. 
 - I have also setup touchscreen functionality from plato and rustvnc.
-- I have copied over the ClaraColor and LibraColor device.rs from plato's latest version
+- I have copied over the ClaraColor and LibraColor device.rs from plato's latest version, 
 - added scaling, padding, added gesture swiping recognition from plato but havent used it for anything yet
 - If killed nickel beforehand program will be able to read power button events, power button or sleep cover will quit vnc and restart nickel, unless you started from ssh in which case it will not be able to restart nickel. Hold touchscreen for more than 6 seconds to exit without restarting nickel regardless of ssh start or not. If you want to be able to restart nickel, have koreader installed to use this function, as i hardcoded the path of the script to use koreader's nickel.sh
+- copied latest framebuffer code from plato, probably wasnt necessary, could have added small changes to add mark 12 code without needing to copy over all other rest of files but i have no device to test it with
+- minor other changes
 ```
 eval "$(tr '\0' '\n' < /proc/1/environ | grep -E '^(PLATFORM|PRODUCT|WIFI_MODULE|INTERFACE|NICKEL_HOME|LANG|DBUS_SESSION_BUS_ADDRESS)=' | sed 's/^/export /')" && cd /mnt/onboard/.adds/plato-0.9.45 && ./nickel.sh &
 ```
