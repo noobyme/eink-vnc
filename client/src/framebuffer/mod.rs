@@ -1,24 +1,23 @@
-pub(crate) mod image;
+pub(crate) mod linuxfb_sys;
 mod ion_sys;
-mod kobo1;
-mod kobo2;
-mod linuxfb_sys;
 mod mxcfb_sys;
 mod sunxi_sys;
-mod transform;
+mod image;
+pub(crate) mod transform;
+pub(crate) mod kobo1;
+mod kobo2;
 
+use anyhow::Error;
+use crate::geom::{Point, Rectangle, surface_area, nearest_segment_point, lerp};
+use crate::geom::{CornerSpec, BorderSpec, ColorSource, Vec2};
+use crate::color::{Color, BLACK, WHITE};
+use crate::vec2;
 use crate::pt;
 use crate::rect;
-use crate::vec2;
 
-use crate::color::{BLACK, WHITE};
-use crate::geom::{lerp, nearest_segment_point, surface_area, Point, Rectangle};
-use crate::geom::{BorderSpec, ColorSource, CornerSpec, Vec2};
-use anyhow::Error;
-
-pub use self::image::Pixmap;
 pub use self::kobo1::KoboFramebuffer1;
 pub use self::kobo2::KoboFramebuffer2;
+pub use self::image::Pixmap;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Display {
@@ -36,9 +35,9 @@ pub enum UpdateMode {
 }
 
 pub trait Framebuffer {
-    fn set_pixel(&mut self, x: u32, y: u32, color: u8);
-    fn get_pixel(&self, x: u32, y: u32) -> u8;
-    fn set_blended_pixel(&mut self, x: u32, y: u32, color: u8, alpha: f32);
+    fn get_pixel(&self, x: u32, y: u32) -> Color;
+    fn set_pixel(&mut self, x: u32, y: u32, color: Color);
+    fn set_blended_pixel(&mut self, x: u32, y: u32, color: Color, alpha: f32);
     fn invert_region(&mut self, rect: &Rectangle);
     fn shift_region(&mut self, rect: &Rectangle, drift: u8);
     fn update(&mut self, rect: &Rectangle, mode: UpdateMode) -> Result<u32, Error>;
@@ -53,15 +52,6 @@ pub trait Framebuffer {
     fn inverted(&self) -> bool;
     fn width(&self) -> u32;
     fn height(&self) -> u32;
-
-    fn draw_gray_tile(&mut self, x: u32, y: u32, width: u32, height: u32, pixels: &[u8]) {
-        for row in 0..height {
-            for col in 0..width {
-                let c = pixels[(row * width + col) as usize];
-                self.set_pixel(x + col, y + row, c);
-            }
-        }
-    }
 
     fn toggle_inverted(&mut self) {
         self.set_inverted(!self.inverted());
@@ -88,12 +78,12 @@ pub trait Framebuffer {
         rect![0, 0, width as i32, height as i32]
     }
 
-    fn clear(&mut self, color: u8) {
+    fn clear(&mut self, color: Color) {
         let rect = self.rect();
         self.draw_rectangle(&rect, color);
     }
 
-    fn draw_rectangle(&mut self, rect: &Rectangle, color: u8) {
+    fn draw_rectangle(&mut self, rect: &Rectangle, color: Color) {
         for y in rect.min.y..rect.max.y {
             for x in rect.min.x..rect.max.x {
                 self.set_pixel(x as u32, y as u32, color);
@@ -101,7 +91,7 @@ pub trait Framebuffer {
         }
     }
 
-    fn draw_blended_rectangle(&mut self, rect: &Rectangle, color: u8, alpha: f32) {
+    fn draw_blended_rectangle(&mut self, rect: &Rectangle, color: Color, alpha: f32) {
         for y in rect.min.y..rect.max.y {
             for x in rect.min.x..rect.max.x {
                 self.set_blended_pixel(x as u32, y as u32, color, alpha);
@@ -110,46 +100,23 @@ pub trait Framebuffer {
     }
 
     fn draw_rectangle_outline(&mut self, rect: &Rectangle, border: &BorderSpec) {
-        let BorderSpec {
-            thickness: border_thickness,
-            color: border_color,
-        } = *border;
-        self.draw_rectangle(
-            &rect![
-                rect.min.x,
-                rect.min.y,
-                rect.max.x - border_thickness as i32,
-                rect.min.y + border_thickness as i32
-            ],
-            border_color,
-        );
-        self.draw_rectangle(
-            &rect![
-                rect.max.x - border_thickness as i32,
-                rect.min.y,
-                rect.max.x,
-                rect.max.y - border_thickness as i32
-            ],
-            border_color,
-        );
-        self.draw_rectangle(
-            &rect![
-                rect.min.x + border_thickness as i32,
-                rect.max.y - border_thickness as i32,
-                rect.max.x,
-                rect.max.y
-            ],
-            border_color,
-        );
-        self.draw_rectangle(
-            &rect![
-                rect.min.x,
-                rect.min.y + border_thickness as i32,
-                rect.min.x + border_thickness as i32,
-                rect.max.y
-            ],
-            border_color,
-        );
+        let BorderSpec { thickness: border_thickness,
+            color: border_color } = *border;
+        self.draw_rectangle(&rect![rect.min.x, rect.min.y,
+                                   rect.max.x - border_thickness as i32,
+                                   rect.min.y + border_thickness as i32],
+                            border_color);
+        self.draw_rectangle(&rect![rect.max.x - border_thickness as i32, rect.min.y,
+                                   rect.max.x, rect.max.y - border_thickness as i32],
+                            border_color);
+        self.draw_rectangle(&rect![rect.min.x + border_thickness as i32,
+                                   rect.max.y - border_thickness as i32,
+                                   rect.max.x, rect.max.y],
+                            border_color);
+        self.draw_rectangle(&rect![rect.min.x, rect.min.y + border_thickness as i32,
+                                   rect.min.x + border_thickness as i32,
+                                   rect.max.y],
+                            border_color);
     }
 
     fn draw_pixmap(&mut self, pixmap: &Pixmap, pt: Point) {
@@ -174,28 +141,7 @@ pub trait Framebuffer {
         }
     }
 
-    fn draw_pixel_contrast(&mut self, x: u32, y: u32, color: u8, exponent: f32, gray: f32) {
-        let rem_gray = 255.0 - gray;
-        let inv_exponent = 1.0 / exponent;
-        let raw_color = color as f32;
-        let color = if raw_color < gray {
-            (gray * (raw_color / gray).powf(exponent)) as u8
-        } else if raw_color > gray {
-            (gray + rem_gray * ((raw_color - gray) / rem_gray).powf(inv_exponent)) as u8
-        } else {
-            gray as u8
-        };
-        self.set_pixel(x, y, color);
-    }
-
-    fn draw_framed_pixmap_contrast(
-        &mut self,
-        pixmap: &Pixmap,
-        rect: &Rectangle,
-        pt: Point,
-        exponent: f32,
-        gray: f32,
-    ) {
+    fn draw_framed_pixmap_contrast(&mut self, pixmap: &Pixmap, rect: &Rectangle, pt: Point, exponent: f32, gray: f32) {
         if (exponent - 1.0).abs() < f32::EPSILON {
             self.draw_framed_pixmap(pixmap, rect, pt);
             return;
@@ -206,14 +152,17 @@ pub trait Framebuffer {
             for x in rect.min.x..rect.max.x {
                 let px = x - rect.min.x + pt.x;
                 let py = y - rect.min.y + pt.y;
-                let raw_color = pixmap.get_pixel(x as u32, y as u32) as f32;
-                let color = if raw_color < gray {
-                    (gray * (raw_color / gray).powf(exponent)) as u8
-                } else if raw_color > gray {
-                    (gray + rem_gray * ((raw_color - gray) / rem_gray).powf(inv_exponent)) as u8
-                } else {
-                    gray as u8
-                };
+                let raw_color = pixmap.get_pixel(x as u32, y as u32);
+                let color = raw_color.apply(|comp| {
+                    let c = comp as f32;
+                    if c < gray {
+                        (gray * (c / gray).powf(exponent)) as u8
+                    } else if c > gray {
+                        (gray + rem_gray * ((c - gray) / rem_gray).powf(inv_exponent)) as u8
+                    } else {
+                        gray as u8
+                    }
+                });
                 self.set_pixel(px as u32, py as u32, color);
             }
         }
@@ -237,18 +186,18 @@ pub trait Framebuffer {
         }
     }
 
-    fn draw_blended_pixmap(&mut self, pixmap: &Pixmap, pt: Point, color: u8) {
+    fn draw_blended_pixmap(&mut self, pixmap: &Pixmap, pt: Point, color: Color) {
         for y in 0..pixmap.height {
             for x in 0..pixmap.width {
                 let px = x + pt.x as u32;
                 let py = y + pt.y as u32;
-                let alpha = (255.0 - pixmap.get_pixel(x, y) as f32) / 255.0;
+                let alpha = (255.0 - pixmap.get_pixel(x, y).gray() as f32) / 255.0;
                 self.set_blended_pixel(px as u32, py as u32, color, alpha);
             }
         }
     }
 
-    fn draw_rounded_rectangle(&mut self, rect: &Rectangle, corners: &CornerSpec, color: u8) {
+    fn draw_rounded_rectangle(&mut self, rect: &Rectangle, corners: &CornerSpec, color: Color) {
         let (nw, ne, se, sw) = match *corners {
             CornerSpec::Uniform(v) => (v, v, v, v),
             CornerSpec::North(v) => (v, v, 0, 0),
@@ -259,7 +208,7 @@ pub trait Framebuffer {
                 north_west,
                 north_east,
                 south_east,
-                south_west,
+                south_west
             } => (north_west, north_east, south_east, south_west),
         };
         let nw_c = rect.min + nw;
@@ -290,13 +239,7 @@ pub trait Framebuffer {
         }
     }
 
-    fn draw_rounded_rectangle_with_border(
-        &mut self,
-        rect: &Rectangle,
-        corners: &CornerSpec,
-        border: &BorderSpec,
-        color: &dyn ColorSource,
-    ) {
+    fn draw_rounded_rectangle_with_border(&mut self, rect: &Rectangle, corners: &CornerSpec, border: &BorderSpec, color: &dyn ColorSource) {
         let (nw, ne, se, sw) = match *corners {
             CornerSpec::Uniform(v) => (v, v, v, v),
             CornerSpec::North(v) => (v, v, 0, 0),
@@ -307,14 +250,12 @@ pub trait Framebuffer {
                 north_west,
                 north_east,
                 south_east,
-                south_west,
+                south_west
             } => (north_west, north_east, south_east, south_west),
         };
 
-        let BorderSpec {
-            thickness: border_thickness,
-            color: border_color,
-        } = *border;
+        let BorderSpec { thickness: border_thickness,
+            color: border_color } = *border;
         let nw_c = rect.min + nw;
         let ne_c = pt!(rect.max.x - ne, rect.min.y + ne);
         let se_c = rect.max - se;
@@ -343,18 +284,17 @@ pub trait Framebuffer {
                     if dist < mid_radius {
                         let delta_dist = small_radius as f32 - dist;
                         alpha = surface_area(delta_dist, angle);
-                        color = lerp(color as f32, border_color as f32, alpha) as u8;
+                        color = color.lerp(border_color, alpha);
                         alpha = 1.0;
                     } else {
                         let delta_dist = dist - radius as f32;
                         color = border_color;
                         alpha = surface_area(delta_dist, angle);
                     }
-                } else if x < rect.min.x + border_thickness as i32
-                    || x >= rect.max.x - border_thickness as i32
-                    || y < rect.min.y + border_thickness as i32
-                    || y >= rect.max.y - border_thickness as i32
-                {
+                } else if x < rect.min.x + border_thickness as i32 ||
+                    x >= rect.max.x - border_thickness as i32 ||
+                    y < rect.min.y + border_thickness as i32 ||
+                    y >= rect.max.y - border_thickness as i32 {
                     color = border_color;
                 }
                 self.set_blended_pixel(x as u32, y as u32, color, alpha);
@@ -362,7 +302,7 @@ pub trait Framebuffer {
         }
     }
 
-    fn draw_triangle(&mut self, triangle: &[Point], color: u8) {
+    fn draw_triangle(&mut self, triangle: &[Point], color: Color) {
         let mut x_min = ::std::i32::MAX;
         let mut x_max = ::std::i32::MIN;
         let mut y_min = ::std::i32::MAX;
@@ -405,8 +345,8 @@ pub trait Framebuffer {
                 let bp = p - b;
 
                 let s_ab = ab.cross(ap).is_sign_positive();
-                let inside = ac.cross(ap).is_sign_positive() != s_ab
-                    && bc.cross(bp).is_sign_positive() == s_ab;
+                let inside = ac.cross(ap).is_sign_positive() != s_ab &&
+                    bc.cross(bp).is_sign_positive() == s_ab;
 
                 let mut dmin = ::std::f32::MAX;
                 let mut nearest = None;
@@ -430,7 +370,7 @@ pub trait Framebuffer {
         }
     }
 
-    fn draw_disk(&mut self, center: Point, radius: i32, color: u8) {
+    fn draw_disk(&mut self, center: Point, radius: i32, color: Color) {
         let rect = Rectangle::from_disk(center, radius);
 
         for y in rect.min.y..rect.max.y {
@@ -444,20 +384,8 @@ pub trait Framebuffer {
         }
     }
 
-    fn draw_segment(
-        &mut self,
-        start: Point,
-        end: Point,
-        start_radius: f32,
-        end_radius: f32,
-        color: u8,
-    ) {
-        let rect = Rectangle::from_segment(
-            start,
-            end,
-            start_radius.ceil() as i32,
-            end_radius.ceil() as i32,
-        );
+    fn draw_segment(&mut self, start: Point, end: Point, start_radius: f32, end_radius: f32, color: Color) {
+        let rect = Rectangle::from_segment(start, end, start_radius.ceil() as i32, end_radius.ceil() as i32);
         let a = vec2!(start.x as f32, start.y as f32) + 0.5;
         let b = vec2!(end.x as f32, end.y as f32) + 0.5;
 
@@ -472,4 +400,21 @@ pub trait Framebuffer {
             }
         }
     }
+
+    // pub fn get_var_info(&self) -> &VarScreenInfo {
+    //     &self.var_info
+    // }
+
+    // fn get_red_index(&self) -> u32 {
+    //     if self.var_info.red.offset > 0 { 2 } else { 0 }
+    // }
+
+    // fn draw_gray_tile(&mut self, x: u32, y: u32, width: u32, height: u32, pixels: &[u8]) {//l,t,w,h
+    //     for row in 0..height {
+    //         for col in 0..width {
+    //             let c = Color::Gray(pixels[(row * width + col) as usize]);
+    //             self.set_pixel(x + col, y + row, c);
+    //         }
+    //     }
+    // } so the main savings was no longer create intermediate readonlypixmap, and no getpixel just read directly
 }

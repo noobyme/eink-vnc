@@ -8,6 +8,7 @@ use std::fs::File;
 use std::os::unix::io::AsRawFd;
 use std::ops::Drop;
 use anyhow::{Error, Context};
+use crate::color::Color;
 use crate::geom::Rectangle;
 use crate::device::CURRENT_DEVICE;
 use super::{UpdateMode, Framebuffer};
@@ -35,7 +36,7 @@ pub struct KoboFramebuffer2 {
     frame: *mut libc::c_void,
     frame_size: usize,
     alloc_size: libc::size_t,
-    var_info: VarScreenInfo,
+    pub var_info: VarScreenInfo,
     fix_info: FixScreenInfo,
     transform: ColorTransform,
     token: u32,
@@ -55,7 +56,7 @@ fn align(value: u32, align: u32) -> u32 {
 impl KoboFramebuffer2 {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<KoboFramebuffer2, Error> {
         let file = File::open(&path)
-                        .with_context(|| format!("can't open framebuffer device {}", path.as_ref().display()))?;
+            .with_context(|| format!("can't open framebuffer device {}", path.as_ref().display()))?;
 
         let mut var_info = var_screen_info(&file)?;
         let mut fix_info = fix_screen_info(&file)?;
@@ -74,7 +75,7 @@ impl KoboFramebuffer2 {
         fix_info.smem_len = fix_info.line_length * var_info.yres_virtual;
 
         let ion = File::open("/dev/ion")
-                       .with_context(|| "can't open ion device")?;
+            .with_context(|| "can't open ion device")?;
 
         let alloc_size = align(fix_info.smem_len, MEM_ALIGN) as libc::size_t;
 
@@ -199,58 +200,74 @@ impl KoboFramebuffer2 {
         };
 
         Ok(KoboFramebuffer2 {
-               ion,
-               display: display.unwrap(),
-               fd_data: data,
-               layer,
-               frame,
-               frame_size,
-               alloc_size,
-               token: 1,
-               monochrome: false,
-               inverted: false,
-               dithered: false,
-               transform: transform_identity,
-               var_info,
-               fix_info,
-           })
+            ion,
+            display: display.unwrap(),
+            fd_data: data,
+            layer,
+            frame,
+            frame_size,
+            alloc_size,
+            token: 1,
+            monochrome: false,
+            inverted: false,
+            dithered: false,
+            transform: transform_identity,
+            var_info,
+            fix_info,
+        })
     }
 
     fn as_bytes(&self) -> &[u8] {
         unsafe { slice::from_raw_parts(self.frame as *const u8, self.frame_size) }
     }
 
+    // pub fn get_var_info(&self) -> &VarScreenInfo {
+    //     &self.var_info
+    // }
 }
+    
 
 impl Framebuffer for KoboFramebuffer2 {
-    fn set_pixel(&mut self, x: u32, y: u32, color: u8) {
-        let mut c = (self.transform)(x, y, color);
-        if self.inverted {
-            c = 255 - c;
-        }
-        let addr = (x + y * self.fix_info.line_length) as isize;
-        let spot = unsafe { self.frame.offset(addr) as *mut u8 };
-        unsafe { *spot = c };
-    }
 
-    fn get_pixel(&self, x: u32, y: u32) -> u8 {
+    fn get_pixel(&self, x: u32, y: u32) -> Color {
         let addr = (x + y * self.fix_info.line_length) as isize;
         let c = unsafe { *(self.frame.offset(addr) as *const u8) };
-        if self.inverted {
+        Color::Gray(if self.inverted {
             255 - c
         } else {
             c
-        }
+        })
     }
 
-    fn set_blended_pixel(&mut self, x: u32, y: u32, color: u8, alpha: f32) {
+
+    fn set_pixel(&mut self, x: u32, y: u32, color: Color) {
+        let mut c = (self.transform)(x, y, color);
+        if self.inverted {
+            c.invert();
+        }
+        let addr = (x + y * self.fix_info.line_length) as isize;
+        let spot = unsafe { self.frame.offset(addr) as *mut u8 };
+        unsafe { *spot = c.gray() };
+    }
+
+
+
+
+
+
+
+
+
+
+
+    fn set_blended_pixel(&mut self, x: u32, y: u32, color: Color, alpha: f32) {
         if alpha >= 1.0 {
             self.set_pixel(x, y, color);
             return;
         }
-        let cur = self.get_pixel(x, y);
-        let color_alpha = color as f32 * alpha;
-        let interp = (color_alpha + (1.0 - alpha) * cur as f32) as u8;
+        let background = self.get_pixel(x, y);
+
+        let interp = background.lerp(color, alpha);
         let c = (self.transform)(x, y, interp);
         self.set_pixel(x, y, c);
     }
@@ -258,8 +275,8 @@ impl Framebuffer for KoboFramebuffer2 {
     fn invert_region(&mut self, rect: &Rectangle) {
         for y in rect.min.y..rect.max.y {
             for x in rect.min.x..rect.max.x {
-                let cur = self.get_pixel(x as u32, y as u32);
-                let color = 255 - cur;
+                let mut color = self.get_pixel(x as u32, y as u32);
+                color.invert();
                 self.set_pixel(x as u32, y as u32, color);
             }
         }
@@ -268,8 +285,8 @@ impl Framebuffer for KoboFramebuffer2 {
     fn shift_region(&mut self, rect: &Rectangle, drift: u8) {
         for y in rect.min.y..rect.max.y {
             for x in rect.min.x..rect.max.x {
-                let cur = self.get_pixel(x as u32, y as u32);
-                let color = cur.saturating_sub(drift);
+                let mut color = self.get_pixel(x as u32, y as u32);
+                color.shift(drift);
                 self.set_pixel(x as u32, y as u32, color);
             }
         }
@@ -457,4 +474,44 @@ impl Drop for KoboFramebuffer2 {
             ManuallyDrop::drop(&mut self.layer.info.color_fb.fb);
         }
     }
+    // fn draw_gray_tile(&mut self, x: u32, y: u32, width: u32, height: u32, pixels: &[u8]) {
+    //     let bpp = self.bytes_per_pixel as isize;
+    //     let line_length = self.fix_info.line_length as isize;
+    //     let x_base = (self.var_info.xoffset as isize + x as isize) * bpp;
+    //     let y_base = (self.var_info.yoffset as isize + y as isize) * line_length;
+    //     let transform = self.transform;
+    //
+    //     for row in 0..height as isize {
+    //         let row_addr = x_base + y_base + row * line_length;
+    //         let row_pixels = &pixels[(row as u32 * width) as usize..((row as u32 + 1) * width) as usize];
+    //         unsafe {
+    //             let row_ptr = self.frame.offset(row_addr) as *mut u8;
+    //             match bpp {
+    //                 1 => {
+    //                     // 8bpp: one byte per pixel — copy row directly
+    //                     for (col, &c) in row_pixels.iter().enumerate() {
+    //                         *row_ptr.add(col) = transform(x + col as u32, y + row as u32, c);
+    //                     }
+    //                 }
+    //                 4 => {
+    //                     // 32bpp: write 3 bytes [B, G, R] per pixel, skip alpha
+    //                     for (col, &c) in row_pixels.iter().enumerate() {
+    //                         let c = transform(x + col as u32, y + row as u32, c);
+    //                         let spot = row_ptr.add(col * 4);
+    //                         *spot = c;
+    //                         *spot.offset(1) = c;
+    //                         *spot.offset(2) = c;
+    //                     }
+    //                 }
+    //                 _ => {
+    //                     // Fallback for other depths
+    //                     for (col, &c) in row_pixels.iter().enumerate() {
+    //                         self.set_pixel(x + col as u32, y + row as u32, c);
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
+
 }
