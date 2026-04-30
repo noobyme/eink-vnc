@@ -3,6 +3,7 @@ use serde::{Serialize, Deserialize};
 use std::cmp::Ordering;
 use std::f32::consts;
 use std::ops::{Add, AddAssign, Sub, SubAssign, Mul, MulAssign, Div, DivAssign};
+use crate::color::Color;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Dir {
@@ -215,19 +216,19 @@ pub enum CornerSpec {
 }
 
 pub trait ColorSource {
-    fn color(&self, x: i32, y: i32) -> u8;
+    fn color(&self, x: i32, y: i32) -> Color;
 }
 
-impl<F> ColorSource for F where F: Fn(i32, i32) -> u8 {
+impl<F> ColorSource for F where F: Fn(i32, i32) -> Color {
     #[inline]
-    fn color(&self, x: i32, y: i32) -> u8 {
+    fn color(&self, x: i32, y: i32) -> Color {
         (self)(x, y)
     }
 }
 
-impl ColorSource for u8 {
+impl ColorSource for Color {
     #[inline]
-    fn color(&self, _: i32, _: i32) -> u8 {
+    fn color(&self, _: i32, _: i32) -> Color {
         *self
     }
 }
@@ -235,7 +236,7 @@ impl ColorSource for u8 {
 #[derive(Debug, Copy, Clone)]
 pub struct BorderSpec {
     pub thickness: u16,
-    pub color: u8,
+    pub color: Color,
 }
 
 const HALF_PIXEL_DIAGONAL: f32 = consts::SQRT_2 / 2.0;
@@ -585,22 +586,22 @@ impl Rectangle {
 
     pub fn includes(&self, pt: Point) -> bool {
         self.min.x <= pt.x && pt.x < self.max.x &&
-        self.min.y <= pt.y && pt.y < self.max.y
+            self.min.y <= pt.y && pt.y < self.max.y
     }
 
     pub fn contains(&self, rect: &Rectangle) -> bool {
         rect.min.x >= self.min.x && rect.max.x <= self.max.x &&
-        rect.min.y >= self.min.y && rect.max.y <= self.max.y
+            rect.min.y >= self.min.y && rect.max.y <= self.max.y
     }
 
     pub fn overlaps(&self, rect: &Rectangle) -> bool {
         self.min.x < rect.max.x && rect.min.x < self.max.x &&
-        self.min.y < rect.max.y && rect.min.y < self.max.y
+            self.min.y < rect.max.y && rect.min.y < self.max.y
     }
 
     pub fn extends(&self, rect: &Rectangle) -> bool {
         let dmin = [self.width(), self.height(),
-                    rect.width(), rect.height()].into_iter().min().unwrap() as i32 / 3;
+            rect.width(), rect.height()].into_iter().min().unwrap() as i32 / 3;
 
         // rect is on top of self.
         if self.min.y >= rect.max.y && self.min.x < rect.max.x && rect.min.x < self.max.x {
@@ -621,11 +622,11 @@ impl Rectangle {
 
     pub fn touches(&self, rect: &Rectangle) -> bool {
         ((self.min.x == rect.max.x || self.max.x == rect.min.x ||
-          self.min.x == rect.min.x || self.max.x == rect.max.x) &&
-         (self.max.y >= rect.min.y && self.min.y <= rect.max.y)) ||
-        ((self.min.y == rect.max.y || self.max.y == rect.min.y ||
-          self.min.y == rect.min.y || self.max.y == rect.max.y) &&
-         (self.max.x >= rect.min.x && self.min.x <= rect.max.x))
+            self.min.x == rect.min.x || self.max.x == rect.max.x) &&
+            (self.max.y >= rect.min.y && self.min.y <= rect.max.y)) ||
+            ((self.min.y == rect.max.y || self.max.y == rect.min.y ||
+                self.min.y == rect.min.y || self.max.y == rect.max.y) &&
+                (self.max.x >= rect.min.x && self.min.x <= rect.max.x))
     }
 
     pub fn merge(&mut self, pt: Point) {
@@ -1155,12 +1156,12 @@ impl Boundary {
 
     pub fn overlaps(&self, rect: &Boundary) -> bool {
         self.min.x < rect.max.x && rect.min.x < self.max.x &&
-        self.min.y < rect.max.y && rect.min.y < self.max.y
+            self.min.y < rect.max.y && rect.min.y < self.max.y
     }
 
     pub fn contains(&self, rect: &Boundary) -> bool {
         rect.min.x >= self.min.x && rect.max.x <= self.max.x &&
-        rect.min.y >= self.min.y && rect.max.y <= self.max.y
+            rect.min.y >= self.min.y && rect.max.y <= self.max.y
     }
 
     pub fn width(&self) -> f32 {

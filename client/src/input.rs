@@ -7,6 +7,9 @@ use std::fs::File;
 use std::sync::mpsc::{self, Sender, Receiver};
 use std::os::unix::io::AsRawFd;
 use std::ffi::CString;
+use std::path::PathBuf;
+use std::time::Instant;
+
 use fxhash::FxHashMap;
 use crate::framebuffer::Display;
 use crate::settings::ButtonScheme;
@@ -14,6 +17,7 @@ use crate::device::CURRENT_DEVICE;
 use crate::geom::{Point, LinearDir};
 use anyhow::{Error, Context};
 
+use std::time::Duration;
 // Event types
 pub const EV_SYN: u16 = 0x00;
 pub const EV_KEY: u16 = 0x01;
@@ -347,7 +351,7 @@ impl Default for TouchState {
     }
 }
 
-pub fn parse_device_events(rx: &Receiver<InputEvent>, ty: &Sender<DeviceEvent>, rotation: i8) {
+pub fn parse_device_events(rx: &Receiver<InputEvent>, ty: &Sender<DeviceEvent>, mut rotation: i8) {
     let mut id = 0;
     let mut last_activity = -60;
     //let Display { mut dims, mut rotation } = display;
@@ -375,7 +379,7 @@ pub fn parse_device_events(rx: &Receiver<InputEvent>, ty: &Sender<DeviceEvent>, 
         dims_y = CURRENT_DEVICE.dims.1;
     }
 
-    //let mut button_scheme = button_scheme;
+    let mut button_scheme= ButtonScheme::Natural;
 
     while let Ok(evt) = rx.recv() {
         if evt.kind == EV_ABS {
@@ -464,51 +468,60 @@ pub fn parse_device_events(rx: &Receiver<InputEvent>, ty: &Sender<DeviceEvent>, 
             if proto != TouchProto::Single {
                 packets.clear();
             }
-        } //else if evt.kind == EV_KEY {
-        //     if SLEEP_COVER.contains(&evt.code) {
-        //         if evt.value == VAL_PRESS {
-        //             ty.send(DeviceEvent::CoverOn).ok();
-        //         } else if evt.value == VAL_RELEASE {
-        //             ty.send(DeviceEvent::CoverOff).ok();
-        //         } else if evt.value == VAL_REPEAT {
-        //             ty.send(DeviceEvent::CoverOn).ok();
-        //         }
-        //     } else if evt.code == KEY_BUTTON_SCHEME {
-        //         if evt.value == VAL_PRESS {
-        //             button_scheme = ButtonScheme::Inverted;
-        //         } else {
-        //             button_scheme = ButtonScheme::Natural;
-        //         }
-        //     } else if evt.code == KEY_ROTATE_DISPLAY {
-        //         let next_rotation = evt.value as i8;
-        //         if next_rotation != rotation {
-        //             let delta = (rotation - next_rotation).abs();
-        //             if delta % 2 == 1 {
-        //                 mem::swap(&mut tc.x, &mut tc.y);
-        //                 mem::swap(&mut dims.0, &mut dims.1);
-        //             }
-        //             rotation = next_rotation;
-        //             let should_mirror = CURRENT_DEVICE.should_mirror_axes(rotation);
-        //             mirror_x = should_mirror.0;
-        //             mirror_y = should_mirror.1;
-        //         }
-        //     } else if evt.code != BTN_TOUCH {
-        //         if let Some(button_status) = ButtonStatus::try_from_raw(evt.value) {
-        //             ty.send(DeviceEvent::Button {
-        //                 time: seconds(evt.time),
-        //                 code: ButtonCode::from_raw(evt.code, rotation, button_scheme),
-        //                 status: button_status,
-        //             }).unwrap();
-        //         }
-        //     }
-        // } else if evt.kind == EV_MSC && evt.code == MSC_RAW {
-        //     if evt.value >= MSC_RAW_GSENSOR_PORTRAIT_DOWN && evt.value <= MSC_RAW_GSENSOR_LANDSCAPE_LEFT {
-        //         let next_rotation = GYROSCOPE_ROTATIONS.iter().position(|&v| v == evt.value)
-        //                                                .map(|i| CURRENT_DEVICE.transformed_gyroscope_rotation(i as i8));
-        //         if let Some(next_rotation) = next_rotation {
-        //             ty.send(DeviceEvent::RotateScreen(next_rotation)).ok();
-        //         }
-        //     }
-        // }
+        } else if evt.kind == EV_KEY {
+            if SLEEP_COVER.contains(&evt.code) {
+                if evt.value == VAL_PRESS {
+                    println!("1A");
+                    ty.send(DeviceEvent::CoverOn).ok();
+                } else if evt.value == VAL_RELEASE {
+                    println!("1B");
+                    ty.send(DeviceEvent::CoverOff).ok();
+                } else if evt.value == VAL_REPEAT {
+                    println!("1C");
+                    ty.send(DeviceEvent::CoverOn).ok();
+                }
+            } else if evt.code == KEY_BUTTON_SCHEME {
+                if evt.value == VAL_PRESS {
+                    println!("1D");
+                    button_scheme = ButtonScheme::Inverted;
+                } else {
+                    println!("1E");
+                    button_scheme = ButtonScheme::Natural;
+                }
+            } else if evt.code == KEY_ROTATE_DISPLAY {
+                println!("1F");
+                let next_rotation = evt.value as i8;
+                if next_rotation != rotation {
+                    let delta = (rotation - next_rotation).abs();
+                    if delta % 2 == 1 {
+                        mem::swap(&mut tc.x, &mut tc.y);
+                        mem::swap(&mut dims_x, &mut dims_y);
+                    }
+                    rotation = next_rotation;
+                    let should_mirror = CURRENT_DEVICE.should_mirror_axes(rotation);
+                    mirror_x = should_mirror.0;
+                    mirror_y = should_mirror.1;
+                }
+            } else if evt.code != BTN_TOUCH {
+                println!("1G");
+                if let Some(button_status) = ButtonStatus::try_from_raw(evt.value) {
+                    ty.send(DeviceEvent::Button {
+                        time: seconds(evt.time),
+                        code: ButtonCode::from_raw(evt.code, rotation, button_scheme),
+                        status: button_status,
+                    }).unwrap();
+                }
+            }
+        } else if evt.kind == EV_MSC && evt.code == MSC_RAW {
+            println!("1H");
+            if evt.value >= MSC_RAW_GSENSOR_PORTRAIT_DOWN && evt.value <= MSC_RAW_GSENSOR_LANDSCAPE_LEFT {
+                let next_rotation = GYROSCOPE_ROTATIONS.iter().position(|&v| v == evt.value)
+                                                       .map(|i| CURRENT_DEVICE.transformed_gyroscope_rotation(i as i8));
+                if let Some(next_rotation) = next_rotation {
+                    ty.send(DeviceEvent::RotateScreen(next_rotation)).ok();
+                }
+            }
+        }
     }
 }
+
