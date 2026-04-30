@@ -75,6 +75,12 @@ For example:
 ``` shell
 ./einkvnc 192.168.2.1 5902 --password abcdefg123 --contrast 2 
 ```
+NickelMenu entry
+```
+menu_item:main:VNCUbuntu:cmd_spawn:quiet:./mnt/onboard/einkvnclatestdebug 192.168.1.60 5900 --password password --rotate 2
+```
+Place the einkvnc file onto your kobo ereader drive, then use the location of the file to run.
+eg /mnt/onboard/einkvnc. the . before the / means current directory
 
 For faster framerates, use USB networking (see https://www.mobileread.com/forums/showthread.php?t=254214).
 
