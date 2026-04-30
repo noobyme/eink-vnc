@@ -14,8 +14,12 @@ I am heavily assisted by AI.
 - copied latest framebuffer code from plato, probably wasnt necessary, could have added small changes to add mark 12 code without needing to copy over all other rest of files but i have no device to test it with
 - minor other changes
 ```
-eval "$(tr '\0' '\n' < /proc/1/environ | grep -E '^(PLATFORM|PRODUCT|WIFI_MODULE|INTERFACE|NICKEL_HOME|LANG|DBUS_SESSION_BUS_ADDRESS)=' | sed 's/^/export /')" && cd /mnt/onboard/.adds/plato-0.9.45 && ./nickel.sh &
+(tr '\0' '\n' < /proc/$(pidof -s nickel)/environ | grep -E '^(USER|SHLVL|LD_LIBRARY_PATH|HOME|TERM|PATH|LANG|SHELL|PWD|DBUS_SESSION_BUS_ADDRESS|NICKEL_HOME|PLATFORM|PRODUCT|WIFI_MODULE|INTERFACE|UBOOT_MMC|UBOOT_RECOVERY|runlevel|prevlevel|boot_port|waveform_p|waveform_sz|hwcfg_p|hwcfg_sz|ntxfw_p|ntxfw_sz|QT_GSTREAMER_PLAYBIN_AUDIOSINK|QT_GSTREAMER_PLAYBIN_AUDIOSINK_DEVICE_PARAMETER|LIBC_FATAL_STDERR_)=' | sed 's/^/export /')
+killall -TERM nickel hindenburg sickel fickel adobehost foxitpdf iink dhcpcd-dbus dhcpcd fmon
+cd /mnt/onboard/.adds/plato-0.9.45
+/mnt/onboard/.adds/plato-0.9.45/nickel.sh
 ```
+these commands can restart nickel from ssh.
 
 A lightweight CLI (command line interface) tool to view a remote screen over VNC, designed to work on eInk screens.
 ~~For now, you can only view, so you'll have to connect a keyboard to the serving computer, or find some other way to interact with it.~~ There is now touch input.
