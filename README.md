@@ -2,17 +2,18 @@
 
 Updates from noobyme:
 
-I have fixed ZRLE DroidVNC NG issues using Claude AI. 
+I am heavily assisted by AI.
 
-I have changed rotation default to use plato's function to see which value to use, so that the correct default upright orientation is used. 
-
-I have added a contingency device detection using /mnt/onboard/.kobo/version instead of using environment variables because starting the tool over ssh does not pass those values. 
-
-I have also setup touchscreen functionality from plato and rustvnc.
-
-I have copied over the ClaraColor and LibraColor device.rs from plato's latest version, so that those devices may be correctly detected if used, Im unsure if the actual program will work however, but I do know that its possible for an incorrectly detected device to still work.
-
-The original commit did not have an issue with zrle droidvnc unless it was a debug compile, in which case it would crash after briefly appearing to work due to it being too slow, apparently. Idk for sure I asked claude to help me. The latest commit however does have an issue, zrle droidvnc doesnt work at all. The compiled file provided by anchovy is the oldest commit one, but you cannot rotate the screen with it
+-I have fixed ZRLE DroidVNC NG issues using Claude AI, mainly 2 issues it seems, the original commit did not have an issue with zrle droidvnc unless it was a debug compile, in which case it would crash after briefly appearing to work due to it being too slow, apparently. Idk for sure I asked claude to help me. The latest commit however does have an issue, zrle droidvnc doesnt work at all. The compiled file provided by anchovy is the oldest commit one, but you cannot rotate the screen with it. Adding this arm (false, 17..=127) to zrle fixes the issue, as does forcing the colour format to 8bpp, as the oldest version did. Second issue identified by Claude was vnc.request_update being called in every event, for every rect, and combined with debug release apparently causes server to close connection.
+-I have changed rotation default to use plato's function
+-I have added a contingency device detection using /mnt/onboard/.kobo/version instead of using environment variables because starting the tool over ssh does not pass those values. 
+-I have also setup touchscreen functionality from plato and rustvnc.
+-I have copied over the ClaraColor and LibraColor device.rs from plato's latest version
+-added padding, added gesture swiping recognition from plato but havent used it for anything yet
+-If kill nickel beforehand, power button or sleep cover will restart nickel, unless you started from ssh in which case it will not work. Hold touchscreen for more than 6 seconds to exit without restarting nickel. If you want to be able to restart nickel from ssh, have koreader installed to use this function, as i hardcoded the path of the script to use koreader's nickel.sh
+```
+eval "$(tr '\0' '\n' < /proc/1/environ | grep -E '^(PLATFORM|PRODUCT|WIFI_MODULE|INTERFACE|NICKEL_HOME|LANG|DBUS_SESSION_BUS_ADDRESS)=' | sed 's/^/export /')" && cd /mnt/onboard/.adds/plato-0.9.45 && ./nickel.sh &
+```
 
 A lightweight CLI (command line interface) tool to view a remote screen over VNC, designed to work on eInk screens.
 ~~For now, you can only view, so you'll have to connect a keyboard to the serving computer, or find some other way to interact with it.~~ There is now touch input.
@@ -44,18 +45,24 @@ To connect to a VNC server:
 ./einkvnc [IP_ADDRESS] [PORT] [OPTIONS]
 ```
 Available options:
-Host
-Port
-Username
-Password
-Contrast: apply a post processing contrast filter
-White_cutoff: apply a post processing filter to turn colors greater than the specified value to white (255
-Exclusive: request a non-shared sessio
-Rotate
-
-WIP:
-Scale
-Longtap
+-Host
+-Port
+-Username
+-Password
+-Contrast: apply a post processing contrast filter
+-White_cutoff: apply a post processing filter to turn colors greater than the specified value to white (255
+-Exclusive: request a non-shared sessio
+-Rotate
+-Scale: fit to width or height
+-Longtap: Send right click for windows server by pressing and holding, android and linux servers seem to automatically implement this so no need
+-partial_update: Choose 1=Fast/A2 2=Fastmono/A2 3=Gui/DU 4=Partial/GL16 5=Full/GC16
+-full_update: Choose 1=Fast 2=Fastmono 3=Gui 4=Partial 5=Full
+-set_dither:unsure exactly wat it do, plato function
+-set_monochrome:unsure exactly wat it do, plato function
+-refresh:how often to do full refresh
+-fps: Decimal value, 30.0 or 0.5 etc
+-bits_format: 8, or 32. 8 default
+-blue_noise: For A2/DU mode, use dithering to produce grayscale
 
 For example:
 
@@ -73,6 +80,7 @@ To stop all other programs use this command before launching eink-vnc, so you ca
 
 ```
 killall -q -TERM nickel hindenburg sickel fickel strickel fontickel adobehost foxitpdf iink dhcpcd-dbus dhcpcd bluealsa bluetoothd fmon nanoclock.lua
+killall -TERM nickel hindenburg sickel fickel adobehost foxitpdf iink dhcpcd-dbus dhcpcd fmon
 ```
 Failed to fill whole buffer error? You messed up somewhere in login credentials or server side ip blocking. 
 
