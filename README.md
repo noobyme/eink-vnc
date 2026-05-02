@@ -10,7 +10,8 @@ I am heavily assisted by AI.
 - I have also setup touchscreen functionality from plato and rustvnc.
 - I have copied over the ClaraColor and LibraColor device.rs from plato's latest version, 
 - added scaling, padding, added gesture swiping recognition from plato but havent used it for anything yet
-- If killed nickel beforehand program will be able to read power button events, power button or sleep cover will quit vnc and restart nickel, unless you started from ssh in which case it will not be able to restart nickel. Hold touchscreen for more than 6 seconds to exit without restarting nickel regardless of ssh start or not. If you want to be able to restart nickel, have take plato's nickel.sh and place inside .adds folder. the path is hardcoded
+- If killed nickel beforehand program will be able to read power button events, power button or sleep cover will quit vnc and restart nickel, unless you started from ssh in which case it will not be able to restart nickel. Hold touchscreen for more than 6 seconds to exit without restarting nickel regardless of ssh start or not. If you want to be able to restart nickel, have take plato's nickel.sh and place inside .adds folder. the path is hardcoded, otherwise you can use nickelmenu to restart nickel too see below
+  
 - copied latest framebuffer code from plato, probably wasnt necessary, could have added small changes to add mark 12 code without needing to copy over all other rest of files but i have no device to test it with
 - add panning for resolutions bigger than device can handle
 - minor other changes
@@ -79,7 +80,7 @@ For example:
 ```
 NickelMenu entry
 ```
-menu_item:main:VNCUbuntu:cmd_spawn:quiet:./mnt/onboard/einkvnclatestdebug 192.168.1.60 5900 --password password --rotate 2
+menu_item:main:VNCTest:cmd_spawn:quiet:killall -TERM nickel hindenburg sickel fickel adobehost foxitpdf iink dhcpcd-dbus dhcpcd fmon; /mnt/onboard/einkvnclatestrelease 192.168.1.150 5900 --password password; /mnt/onboard/.adds/plato-0.9.45/nickel.sh
 ```
 Place the einkvnc file onto your kobo ereader drive, then use the location of the file to run.
 eg /mnt/onboard/einkvnc. the . before the / means current directory. Rename the file to einkvnc instead of einkvncrelease or einkvncdebug
