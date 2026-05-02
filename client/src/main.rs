@@ -182,6 +182,11 @@ fn main() -> Result<(), Error> {
                 .help("Blue noise dithering for 1bit output")
                 .long("blue_noise")
         )
+        .arg(
+            Arg::with_name("PAN")
+                .help("Swipe to pan instead of swipe to drag")
+                .long("pan")
+        )
             .get_matches();
 
     let host = matches.value_of("HOST").unwrap();
@@ -203,6 +208,7 @@ fn main() -> Result<(), Error> {
     let fps = value_t!(matches.value_of("FPS"), f32).unwrap_or(30.0);
     let bits_format = value_t!(matches.value_of("BPP"), u8).unwrap_or(8);
     let blue_noise = matches.is_present("BLUE_NOISE");
+    let is_swipe = matches.is_present("PAN");
 
     info!("connecting to {}:{}", host, port);
     let stream = match std::net::TcpStream::connect((host, port)) {
@@ -432,8 +438,18 @@ fn main() -> Result<(), Error> {
     let mut x_padding = 0;
     let mut y_padding = 0;
 
-    let mut original_fb_rect = rect![0+x_padding as i32, 0+y_padding as i32, width as i32, height as i32];
-    let mut scaled_fb_rect = rect![0+x_padding as i32, 0+y_padding as i32, width as i32, height as i32];
+    let mut x_offset:u32 = 0;
+    let mut y_offset:u32 = 0;
+
+    let mut left_x_truncate = 0;
+    let mut top_y_truncate = 0;
+    let mut right_x_truncate = 0;
+    let mut bottom_y_truncate = 0;
+
+    let mut device_fb_rect = rect![0, 0, fb.width() as i32, fb.height() as i32];
+    let mut cropped_vnc_fb_rect = rect![0+x_padding as i32, 0+y_padding as i32, fb.width() as i32+x_padding as i32, fb.height() as i32+y_padding as i32];
+    let mut original_vnc_fb_rect = rect![0, 0, width as i32, height as i32];
+    let mut scaled_fb_rect = rect![0+x_padding as i32, 0+y_padding as i32, width as i32+x_padding as i32, height as i32+y_padding as i32];
 
     if scale {
         if width > height {
@@ -473,8 +489,33 @@ fn main() -> Result<(), Error> {
             }
         };
     } else {
-        x_padding = ((fb.width()-width as u32)/2) as u32;//width should always be smaller than or equal to fb width
-        y_padding = ((fb.height()-height as u32)/2) as u32;//if its bigger, it would fail anyway?
+        if width < fb.width() as u16 {
+            x_padding = ((fb.width()-width as u32)/2) as u32
+        };
+        ;//width should always be smaller than or equal to fb width
+        if height < fb.height() as u16 {
+            y_padding = ((fb.height()-height as u32)/2) as u32;//if its bigger, it would fail anyway?
+        };
+        if width > fb.width() as u16 {
+            cropped_vnc_fb_rect = rect![
+                0+x_padding as i32+x_offset as i32,
+                0+y_padding as i32+y_offset as i32,
+                fb.width() as i32+x_padding as i32+x_offset as i32,
+                fb.height() as i32+y_padding as i32+y_offset as i32];
+        } else if height > fb.height() as u16 {
+            cropped_vnc_fb_rect = rect![
+                0+x_padding as i32+x_offset as i32,
+                0+y_padding as i32+y_offset as i32,
+                fb.width() as i32+x_padding as i32+x_offset as i32,
+                fb.height() as i32+y_padding as i32+y_offset as i32];
+        } else if width > fb.width() as u16 && height > fb.height() as u16 {
+            cropped_vnc_fb_rect = rect![
+                0+x_offset as i32,
+                0+y_offset as i32,
+                fb.width() as i32+x_offset as i32,
+                fb.height() as i32+y_offset as i32];
+        }
+
     };
     //dbg!(fb.width(),width,fb.height(),height,(width as f32*scale_factor) as i32,(height as f32*scale_factor) as i32);
 
@@ -519,7 +560,7 @@ fn main() -> Result<(), Error> {
     let finger_seconds = Duration::from_secs(2);
 
     'running: loop {
-
+        //dbg!(left_x_truncate,right_x_truncate,top_y_truncate,bottom_y_truncate);
         if let Ok(evt) = rx.try_recv() {
             match evt {
                 Event::Device(de) => {
@@ -553,20 +594,20 @@ fn main() -> Result<(), Error> {
                                                 if long_tap {
                                                     if finger_down_count.elapsed() > finger_seconds {
                                                         vnc.send_pointer_event(0x04,
-                                                                               position.x as u16 - x_padding as u16,
-                                                                               position.y as u16 - y_padding as u16)
-                                                            .unwrap();
+                                                                               (position.x as u16 - x_padding as u16+x_offset as u16).clamp(0, width as u16),
+                                                                               (position.y as u16 - y_padding as u16+y_offset as u16).clamp(0, height as u16)
+                                                        ).unwrap();
                                                         vnc.send_pointer_event(0x00,
-                                                                               position.x as u16 - x_padding as u16,
-                                                                               position.y as u16 - y_padding as u16)
-                                                            .unwrap();
+                                                                               (position.x as u16 - x_padding as u16+x_offset as u16).clamp(0, width as u16),
+                                                                               (position.y as u16 - y_padding as u16+y_offset as u16).clamp(0, height as u16)
+                                                        ).unwrap();
                                                         //dbg!(position.x as u16-x_padding as u16, position.y as u16-y_padding as u16);
                                                     }
                                                 } else {
                                                     vnc.send_pointer_event(0x00,
-                                                                           position.x as u16 - x_padding as u16,
-                                                                           position.y as u16 - y_padding as u16)
-                                                        .unwrap();
+                                                                           (position.x as u16 - x_padding as u16+x_offset as u16).clamp(0, width as u16),
+                                                                           (position.y as u16 - y_padding as u16+y_offset as u16).clamp(0, height as u16)
+                                                    ).unwrap();
                                                     //dbg!(position.x as u16-x_padding as u16, position.y as u16-y_padding as u16);
                                                 }
                                             };
@@ -590,9 +631,9 @@ fn main() -> Result<(), Error> {
                                                 //dbg!((((position.x as f32 - x_padding as f32)/ scale_factor) as u16).clamp(0,width as u16), (((position.y as f32 - y_padding as f32)/ scale_factor) as u16).clamp(0,height as u16));
                                             } else {
                                                 vnc.send_pointer_event(0x01,
-                                                                       position.x as u16 - x_padding as u16,
-                                                                       position.y as u16 - y_padding as u16)
-                                                    .unwrap();
+                                                                       (position.x as u16 - x_padding as u16+x_offset as u16).clamp(0, width as u16),
+                                                                       (position.y as u16 - y_padding as u16+y_offset as u16).clamp(0, height as u16)
+                                                ).unwrap();
                                                 finger_down_count = Instant::now();
                                                 //dbg!(position.x as u16-x_padding as u16,position.y as u16-y_padding as u16);
                                             }
@@ -606,12 +647,19 @@ fn main() -> Result<(), Error> {
                                                 //dbg!((((position.x as f32 - x_padding as f32) / scale_factor) as u16).clamp(0,width as u16), (((position.y as f32 - y_padding as f32) / scale_factor) as u16).clamp(0,height as u16));
                                                 //100-10/2 45 100/2-10=40
                                                 //from physical framebuffer means must minus padding before scale, scale is so original
+                                            } else if is_swipe {
+
+                                                vnc.send_pointer_event(0x00,
+                                                                       (position.x as u16 - x_padding as u16+x_offset as u16).clamp(0, width as u16),
+                                                                       (position.y as u16 - y_padding as u16+y_offset as u16).clamp(0, height as u16)
+                                                ).unwrap();
+
                                             } else {
                                                 vnc.send_pointer_event(0x01,
-                                                                       position.x as u16 - x_padding as u16,
-                                                                       position.y as u16 - y_padding as u16
+                                                                       (position.x as u16 - x_padding as u16+x_offset as u16).clamp(0, width as u16),
+                                                                       (position.y as u16 - y_padding as u16+y_offset as u16).clamp(0, height as u16)
                                                 ).unwrap();
-                                                //dbg!(position.x as u16-x_padding as u16, position.y as u16-y_padding as u16);
+                                                //dbg!(position.x as u16-x_padding as u16, position.y as u16-y_padding as u16)
                                             }
                                         },
                                     }
@@ -625,7 +673,7 @@ fn main() -> Result<(), Error> {
                             // println!("BUTTON");
                             fb.set_rotation(CURRENT_DEVICE.startup_rotation()).ok();
                             //drop(vnc);
-                            Command::new("mnt/onboard/.adds/koreader/nickel.sh")
+                            Command::new("mnt/onboard/.adds/nickel.sh")
                                 .status()
                                 .ok();
                             break 'running;
@@ -636,7 +684,7 @@ fn main() -> Result<(), Error> {
                             // println!("COVER");
                             fb.set_rotation(CURRENT_DEVICE.startup_rotation()).ok();
                             //drop(vnc);
-                            Command::new("mnt/onboard/.adds/koreader/nickel.sh")
+                            Command::new("mnt/onboard/.adds/nickel.sh")
                                 //starting from ssh wont work...
                                 .status()
                                 .ok();
@@ -656,13 +704,66 @@ fn main() -> Result<(), Error> {
                         GestureEvent::Swipe {
                             dir, ..
                         } => {
-                            // println!("Swipe");
+                            dbg!(x_offset,y_offset,dir);
                             match dir {
-                                Dir::North => {},
-                                Dir::East => {},
-                                Dir::South => {},
-                                Dir::West => {},
+                                Dir::North => {
+                                    if height > fb.height() as u16 {
+                                        has_drawn_once = false;
+                                        if y_offset+fb.height()+fb.height()/2 < height as u32 {
+                                            y_offset += fb.height() / 2;
+                                        } else {
+                                            y_offset += height as u32-fb.height()-y_offset;
+                                        }
+                                    }
+                                },
+                                Dir::East => {
+                                    if width > fb.width() as u16 {
+                                        has_drawn_once = false;
+                                        //0-1920-379 >379
+                                        if x_offset > fb.width() {
+                                            x_offset -= fb.width() / 2;
+                                        } else {
+                                            x_offset = 0;
+                                        }
+                                    }
+                                },
+                                Dir::South => {
+                                    if height > fb.height() as u16 {
+                                        has_drawn_once = false;
+                                        // 0 -1080/2 >1080/2
+                                        if y_offset > fb.height() {
+                                            y_offset -= fb.height() / 2;
+                                        } else {
+                                            y_offset = 0;
+                                        }
+                                    }
+                                },
+                                Dir::West => {
+                                    if width > fb.width() as u16 {
+                                        has_drawn_once = false;
+                                        //0+758+758/2 < 1920
+                                        if x_offset+fb.width()+fb.width()/2 < width as u32 {
+                                            x_offset += fb.width() / 2;
+                                        } else {
+                                            // =1000+1920-758-1000
+                                            x_offset += width as u32-fb.width()-x_offset;
+                                        }
+                                    }
+                                },
                             }
+                            if vnc.request_update(
+                                Rect {
+                                    left:0+x_offset as u16,
+                                    top:0+y_offset as u16,
+                                    width:fb.width() as u16,
+                                    height:fb.height() as u16},
+                                false,
+                            ).is_err() {
+                                error!("server disconnected");
+                                break;
+                            }
+                            // fb.update(&device_fb_rect, full_update_mode).ok();
+                            // dbg!(x_offset,y_offset);
                         },
                         _ => {
                         },
@@ -676,7 +777,7 @@ fn main() -> Result<(), Error> {
 
         for event in vnc.poll_iter() {
             use client::Event;
-
+            // dbg!(&event);
             match event {
                 Event::Disconnected(None) => break 'running,
                 Event::Disconnected(Some(error)) => {
@@ -740,27 +841,12 @@ fn main() -> Result<(), Error> {
                                     } else {
                                         fb.set_pixel(scaled_l + x_out+x_padding, scaled_t + y_out+y_padding, gray);
                                     };
-
-
                                 }
                             }
                         }
 
                         let elapsed_ms = time_at_sol.elapsed().as_millis();
                         debug!("postproc Δt: {}", elapsed_ms);
-                        //println!("W{:?}H{:?}L{:?}T{:?}GPLEN{:?}",w,h,l,t,gray_pixels.len());
-                        // dbg!(vnc_rect_index.len());
-                        //#[cfg(feature = "eink_device")]
-                        // {
-                        //     for row in 0..h {
-                        //         for col in 0..w {
-                        //             //let c = Color::Gray(gray_pixels[(row * w + col) as usize]);
-                        //             //pixels is vec of u8, 1 byte per vector element
-                        //             //4 elements make one pixel
-                        //             let c = Color::Rgb(pixels[(row*w+col) as usize*bpp],pixels[(row*w+col) as usize*bpp+1],pixels[(row*w+col) as usize*bpp+2]);
-                        //             fb_to_scale.set_pixel((l as u32+ col as u32), (t as u32+ row as u32), c);
-                        //         }
-                        //     }
                             // } //5x3+4=19 x2=38 5x3x2+4x2=38 but 5x2x3x2+4x2=68
                             //draw gray_tile merely creates grayscale pixel vec, does not do drawing?
                             //actual pixel updating happens in client.rs fb.update method
@@ -812,14 +898,68 @@ fn main() -> Result<(), Error> {
                         let l = vnc_rect.left as u32;
                         let t = vnc_rect.top as u32;
 
+                        left_x_truncate = 0;
+                        top_y_truncate = 0;
+                        right_x_truncate = 0;
+                        bottom_y_truncate = 0;
+
                         let elapsed_ms = time_at_sol.elapsed().as_millis();
                         debug!("postproc Δt: {}", elapsed_ms);
                         //let bpp = current_format.bits_per_pixel as usize / 8;
 
+                        //better check if in range than offset, range 0-758,758-1516,1616-1920
+                        //0-500 250-750 500-1000, offset, width+offset
+                        //we want to shift... by 50% of framebuffer each time?
+
+                        if height > fb.height() as u16 {
+                            if t > fb.height()+y_offset { continue };//if top is greater than upper limit
+                            if t+h < y_offset { continue };//if bottom is less than lower limit
+                        };
+
+                        if width > fb.width() as u16 {
+                            // if l > fb.width()+x_offset || l < x_offset { continue };
+                            if l > fb.width()+x_offset { continue };//if left is greater than upper limit
+                            if l+w < x_offset { continue };//if right is less than lower limit
+                        };//left could be lower than limit and right could be more than upper, but doesnt mean whole rect is out of bounds
+
                         #[cfg(feature = "eink_device")]
                         {
-                            for row in 0..h {
-                                for col in 0..w {
+                            'row: for row in 0..h {
+                                'col: for col in 0..w {
+                                    if height > fb.height() as u16 {
+                                        if t + row < y_offset { //if y is less than lower limit, skip this pixel
+                                            continue
+                                        };
+                                        if t + row == fb.height() + y_offset { //if y is greater than upper limit, break row loop?
+                                            bottom_y_truncate = row;//break column loop? because the rect is done, no more pixels will be in bounds
+                                            break 'row
+                                        };
+                                        //we have filtered out rects that are entirely out of bounds
+                                        //now filter partial in bounds or, entirely in bounds
+                                        if t + row == y_offset { //if y is greater than lower limit?
+                                            top_y_truncate = row;//if exactly on limit, make truncate this y pixel
+                                        };
+                                    };
+                                    if width > fb.width() as u16 {
+                                        if l + col <  x_offset { //if x below lower limit skip this pixel
+                                            continue
+                                        }
+
+                                        if l + col == fb.width() + x_offset { //if x is upper bound, i want to skip future x loops too
+                                            right_x_truncate = col;//since the limit will be the same for each row... no, we only want to break this one
+                                            break 'col //because we must still process the remaining pixels and set them
+                                        }
+
+                                        if l + col == x_offset { // a rect that is partial can only fulfill one
+                                            //but a full bound rect can fulfill both conditions,
+                                            // in which case truncate should be 0 but instead set to upper or lower limit, there is
+                                            //only one truncate value, the line at which a rect is in bounds, is it possible a rect can be bigger
+                                            //than current range and has 2 truncation lines? yes...
+                                            left_x_truncate = col;//if x is lower bound
+                                        }
+                                    };
+                                    //we only deal with coordinates, yea one co ordinate can never be smaller than min and bigger than ma
+
                                     //let c = Color::Gray(gray_pixels[(row * w + col) as usize]);
                                     //pixels is vec of u8, 1 byte per vector element
                                     //4 elements make one pixel
@@ -842,12 +982,19 @@ fn main() -> Result<(), Error> {
                                     let gray = Color::Gray(post_proc_bin.data[luma as usize]);
                                     if blue_noise {
                                         fb.set_pixel(
-                                            l+col+x_padding,
-                                            t + row +y_padding,
-                                            transform_dither_g2(l + col+x_padding, t + row+y_padding,gray));
+                                            l + col-x_offset+x_padding, //although set pixel is for... device co ords, bc we are using vnc co ords must pan and subtract?
+                                            t + row-y_offset+y_padding,
+                                            transform_dither_g2(
+                                                l + col-x_offset+x_padding,
+                                                t + row-y_offset+y_padding,
+                                                gray));
 
                                     } else {
-                                        fb.set_pixel(l+col+x_padding, t + row +y_padding, gray);
+                                        fb.set_pixel(
+                                            l + col-x_offset + x_padding,
+                                            t + row-y_offset + y_padding,
+                                            gray);
+                                        // dbg!(l + col-x_offset+x_padding, t + row-y_offset +y_padding, gray);
                                     };
                                 }
                             }
@@ -860,23 +1007,45 @@ fn main() -> Result<(), Error> {
                         let elapsed_ms = time_at_sol.elapsed().as_millis();
                         debug!("draw Δt: {}", elapsed_ms);
 
-                        let w = vnc_rect.width as i32;
-                        let h = vnc_rect.height as i32;
+                        let mut w = vnc_rect.width as i32;
+                        let mut h = vnc_rect.height as i32;
                         let l = vnc_rect.left as i32;
                         let t = vnc_rect.top as i32;
 
-                        let delta_rect = rect![l+x_padding as i32, t+y_padding as i32, l + w+x_padding as i32, t + h+y_padding as i32];
-                        if delta_rect == original_fb_rect {
+                        if right_x_truncate > 0 {
+                            w = right_x_truncate as i32
+                        }
+                        if bottom_y_truncate > 0 {
+                            h = bottom_y_truncate as i32
+                        }
+
+                        let delta_rect = rect![
+                            l+x_padding as i32+left_x_truncate as i32-x_offset as i32,
+                            t+y_padding as i32+top_y_truncate as i32-y_offset as i32,
+                            l + w+x_padding as i32-x_offset as i32,
+                            t + h+y_padding as i32-y_offset as i32];
+                        cropped_vnc_fb_rect = rect![
+                            0+x_padding as i32+x_offset as i32,
+                            0+y_padding as i32+y_offset as i32,
+                            fb.width() as i32+x_padding as i32+x_offset as i32,
+                            fb.height() as i32+y_padding as i32+y_offset as i32];
+                        //cropped_vnc gives location in vnc space, while delta rect must use dev fb space otherwise fb.update will fail
+                        //-xoffset vs +x_offset will also ensure they never equal to each othter...
+                        //delta rect and dev fb rect... can be equal to each other in size but in different location?
+                        //since we always subtract offset... we could receive a rect entirely out of bounds same size... but because we discard rects out of bounds
+                        //were fine?
+
+                        if delta_rect == original_vnc_fb_rect || delta_rect == cropped_vnc_fb_rect || delta_rect == device_fb_rect {
                             dirty_rects.clear();
                             dirty_rects_since_refresh.clear();
                             #[cfg(feature = "eink_device")]
                             {
                                 if !has_drawn_once || dirty_update_count > max_dirty_refreshes {
-                                    fb.update(&original_fb_rect, full_update_mode).ok();
+                                    fb.update(&device_fb_rect, full_update_mode).ok();
                                     dirty_update_count = 0;
                                     has_drawn_once = true;
                                 } else {
-                                    fb.update(&original_fb_rect, partial_update_mode).ok();
+                                    fb.update(&device_fb_rect, partial_update_mode).ok();
                                 }
                             }
                         } else {
@@ -938,12 +1107,32 @@ fn main() -> Result<(), Error> {
                             push_to_dirty_rect_list(&mut dirty_rects, delta_rect); //add to dirty rect list, merely copy rect to another place, no update call
 
                         } else {
-                            {
-                                let src_left = src.left as u32;
-                                let src_top = src.top as u32;
+                            let src_left = src.left as u32;
+                            let src_top = src.top as u32;
+                            let src_width = src.width as u32;
+                            let src_height = src.height as u32;
 
-                                let dst_left = dst.left as u32;
-                                let dst_top = dst.top as u32;
+                            let dst_left = dst.left as u32;
+                            let dst_top = dst.top as u32;
+                            let mut dst_width = dst.width as u32;
+                            let mut dst_height = dst.height as u32;
+
+                            left_x_truncate = 0;
+                            top_y_truncate = 0;
+                            right_x_truncate = 0;
+                            bottom_y_truncate = 0;
+
+                            {
+
+                                if height > fb.height() as u16 {
+                                    if dst_top > fb.height()+y_offset  { continue };//if top is greater than upper
+                                    if dst_top+dst_height < y_offset { continue };//if bot is less than lower
+                                }
+
+                                if width > fb.width() as u16 {
+                                    if dst_left > fb.width()+x_offset { continue };//if left is greater than upper
+                                    if dst_left+dst_width < x_offset { continue };//if right is less than lower
+                                }
 
                                 let mut intermediary_pixmap =
                                     Pixmap::new(dst.width as u32,
@@ -952,25 +1141,57 @@ fn main() -> Result<(), Error> {
 
                                 for y in 0..intermediary_pixmap.height {
                                     for x in 0..intermediary_pixmap.width {
-                                        let color = fb.get_pixel(src_left + x+x_padding as u32, src_top + y+x_padding as u32);
+                                        let color = fb.get_pixel(src_left + x+x_padding-x_offset as u32, src_top + y+y_padding-y_offset as u32);
                                         intermediary_pixmap.set_pixel(x, y, color);
                                     }
                                 }
 
-                                for y in 0..intermediary_pixmap.height {
-                                    for x in 0..intermediary_pixmap.width {
+                                'y:for y in 0..intermediary_pixmap.height {
+                                    'x:for x in 0..intermediary_pixmap.width {
                                         let color = intermediary_pixmap.get_pixel(x, y);
+                                        if height > fb.height() as u16 {
+                                            if y + dst_top == fb.height() + y_offset {
+                                                bottom_y_truncate = y;
+                                                break 'y
+                                            } //if y pixel is greater than upper
+
+                                            if y + dst_top <  y_offset {
+                                                continue
+                                            }//do we want continue or break first? which saves cycles?
+
+                                            if y + dst_top == y_offset {
+                                                top_y_truncate = y;
+                                            } //if y less than lower, once hits lower limit
+                                        };
+                                        if width > fb.width() as u16 {
+                                            if x + dst_left == fb.width() + x_offset {
+                                                right_x_truncate = x;
+                                                break 'x
+                                            }
+                                            if x + dst_left < x_offset {
+                                                continue
+                                            }
+                                            if x + dst_left == x_offset {
+                                                left_x_truncate = x;
+                                            }
+                                        };
                                         // fb.set_pixel(dst_left + x, dst_top + y,  transform_dither_g2(dst_left + x, dst_top + y,color));
-                                        fb.set_pixel(dst_left + x+x_padding as u32, dst_top + y+y_padding as u32, color);
+                                        fb.set_pixel(dst_left + x-x_offset+x_padding as u32, dst_top + y-y_offset+y_padding as u32, color);
                                     }
                                 }
                             }
+                            if right_x_truncate > 0 {
+                                dst_width = right_x_truncate
+                            }
+                            if bottom_y_truncate > 0 {
+                                dst_height = bottom_y_truncate
+                            }
 
                             let delta_rect = rect![
-                        dst.left as i32+x_padding as i32,
-                        dst.top as i32+y_padding as i32,
-                        (dst.left + dst.width) as i32+x_padding as i32,
-                        (dst.top + dst.height) as i32+y_padding as i32
+                        dst_left as i32+x_padding as i32+left_x_truncate as i32-x_offset as i32,
+                        dst_top as i32+y_padding as i32+top_y_truncate as i32-y_offset as i32,
+                        (dst_left + dst_width) as i32+x_padding as i32-x_offset as i32,
+                        (dst_top + dst_height) as i32+y_padding as i32-y_offset as i32
                     ];
                             push_to_dirty_rect_list(&mut dirty_rects, delta_rect);
                         };
@@ -1035,12 +1256,27 @@ fn main() -> Result<(), Error> {
         }
 
         if frame_complete {
-            if vnc.request_update(
-                Rect { left: 0, top: 0, width, height },
-                true,
-            ).is_err() {
-                error!("server disconnected");
-                break;
+            if scale {
+                if vnc.request_update(
+                    Rect { left: 0, top: 0, width, height },
+                    true,
+                ).is_err() {
+                    error!("server disconnected");
+                    break;
+                }
+            } else {
+                if vnc.request_update(
+                    Rect {
+                        left:0+x_offset as u16,
+                        top:0+y_offset as u16,
+                        width:if width < fb.width() as u16 {width} else {fb.width() as u16},
+                        height:if height < fb.height() as u16 {height} else {fb.height() as u16}
+                    },
+                    true,
+                ).is_err() {
+                    error!("server disconnected");
+                    break;
+                }
             }
         }
         //only at end of frame request a new update
