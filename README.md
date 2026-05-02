@@ -82,7 +82,7 @@ NickelMenu entry
 menu_item:main:VNCUbuntu:cmd_spawn:quiet:./mnt/onboard/einkvnclatestdebug 192.168.1.60 5900 --password password --rotate 2
 ```
 Place the einkvnc file onto your kobo ereader drive, then use the location of the file to run.
-eg /mnt/onboard/einkvnc. the . before the / means current directory
+eg /mnt/onboard/einkvnc. the . before the / means current directory. Rename the file to einkvnc instead of einkvncrelease or einkvncdebug
 
 For faster framerates, use USB networking (see https://www.mobileread.com/forums/showthread.php?t=254214).
 
