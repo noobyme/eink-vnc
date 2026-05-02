@@ -12,6 +12,7 @@ I am heavily assisted by AI.
 - added scaling, padding, added gesture swiping recognition from plato but havent used it for anything yet
 - If killed nickel beforehand program will be able to read power button events, power button or sleep cover will quit vnc and restart nickel, unless you started from ssh in which case it will not be able to restart nickel. Hold touchscreen for more than 6 seconds to exit without restarting nickel regardless of ssh start or not. If you want to be able to restart nickel, have koreader installed to use this function, as i hardcoded the path of the script to use koreader's nickel.sh
 - copied latest framebuffer code from plato, probably wasnt necessary, could have added small changes to add mark 12 code without needing to copy over all other rest of files but i have no device to test it with
+- add panning for resolutions bigger than device can handle
 - minor other changes
 ```
 (tr '\0' '\n' < /proc/$(pidof -s nickel)/environ | grep -E '^(USER|SHLVL|LD_LIBRARY_PATH|HOME|TERM|PATH|LANG|SHELL|PWD|DBUS_SESSION_BUS_ADDRESS|NICKEL_HOME|PLATFORM|PRODUCT|WIFI_MODULE|INTERFACE|UBOOT_MMC|UBOOT_RECOVERY|runlevel|prevlevel|boot_port|waveform_p|waveform_sz|hwcfg_p|hwcfg_sz|ntxfw_p|ntxfw_sz|QT_GSTREAMER_PLAYBIN_AUDIOSINK|QT_GSTREAMER_PLAYBIN_AUDIOSINK_DEVICE_PARAMETER|LIBC_FATAL_STDERR_)=' | sed 's/^/export /')
@@ -69,6 +70,7 @@ Available options:
 - fps: Decimal value, 30.0 or 0.5 etc
 - bits_format: 8, or 32. 8 default
 - blue_noise: For A2/DU mode, use dithering to produce grayscale
+- pan:disable click drag
 
 For example:
 
