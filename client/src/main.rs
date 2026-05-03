@@ -187,6 +187,11 @@ fn main() -> Result<(), Error> {
                 .help("Swipe to pan instead of swipe to drag")
                 .long("pan")
         )
+        .arg(
+            Arg::with_name("RED_SHIFT")
+                .help("If have colour inaccuracy, switch red shift and blue shift")
+                .long("red_shift")
+        )
             .get_matches();
 
     let host = matches.value_of("HOST").unwrap();
@@ -209,6 +214,8 @@ fn main() -> Result<(), Error> {
     let bits_format = value_t!(matches.value_of("BPP"), u8).unwrap_or(8);
     let blue_noise = matches.is_present("BLUE_NOISE");
     let is_swipe = matches.is_present("PAN");
+    let red_shift = matches.is_present("RED_SHIFT");
+
 
     info!("connecting to {}:{}", host, port);
     let stream = match std::net::TcpStream::connect((host, port)) {
@@ -263,13 +270,13 @@ fn main() -> Result<(), Error> {
     let mut fb: Box<dyn Framebuffer> = if CURRENT_DEVICE.mark() != 8 {
 
         let raw_fb = KoboFramebuffer1::new(FB_DEVICE).context("can't create framebuffer").unwrap();
-        fb_red_index = if raw_fb.var_info.red.offset > 0 { 2 } else { 0 };
+        fb_red_index = if raw_fb.var_info.red.offset > 0 && !red_shift { 2 } else { 0 };
         Box::new(raw_fb)
 
     } else {
 
         let raw_fb = KoboFramebuffer2::new(FB_DEVICE).context("can't create framebuffer").unwrap();
-        fb_red_index = if raw_fb.var_info.red.offset > 0 { 2 } else { 0 };
+        fb_red_index = if raw_fb.var_info.red.offset > 0 && !red_shift { 2 } else { 0 };
         Box::new(raw_fb)
 
     };
@@ -290,11 +297,11 @@ fn main() -> Result<(), Error> {
         red_max: 255,
         green_max: 255,
         blue_max: 255,
-        red_shift:fb_red_index*bits_format,
+        red_shift:fb_red_index*8,
         green_shift: 8,
-        blue_shift:(2-fb_red_index)*bits_format,
+        blue_shift:(2-fb_red_index)*8,
     };
-
+    // dbg!(red_shift,fb_red_index,bits_format, SD_COLOR_FORMAT.red_shift,SD_COLOR_FORMAT.blue_shift);
     //red shift and blue shift wrong thus color off... depth is not
     //og release only sampled red too... but it depends on bpp?
     //it depends on server it seems
@@ -594,19 +601,19 @@ fn main() -> Result<(), Error> {
                                                 if long_tap {
                                                     if finger_down_count.elapsed() > finger_seconds {
                                                         vnc.send_pointer_event(0x04,
-                                                                               (position.x as u16 - x_padding as u16+x_offset as u16).clamp(0, width as u16),
-                                                                               (position.y as u16 - y_padding as u16+y_offset as u16).clamp(0, height as u16)
+                                                                               ((position.x as i16 - x_padding as i16+x_offset as i16) as u16).clamp(0, width as u16),
+                                                                               ((position.y as i16 - y_padding as i16+y_offset as i16) as u16).clamp(0, height as u16)
                                                         ).unwrap();
                                                         vnc.send_pointer_event(0x00,
-                                                                               (position.x as u16 - x_padding as u16+x_offset as u16).clamp(0, width as u16),
-                                                                               (position.y as u16 - y_padding as u16+y_offset as u16).clamp(0, height as u16)
+                                                                               ((position.x as i16 - x_padding as i16+x_offset as i16) as u16).clamp(0, width as u16),
+                                                                               ((position.y as i16 - y_padding as i16+y_offset as i16) as u16).clamp(0, height as u16)
                                                         ).unwrap();
                                                         //dbg!(position.x as u16-x_padding as u16, position.y as u16-y_padding as u16);
                                                     }
                                                 } else {
                                                     vnc.send_pointer_event(0x00,
-                                                                           (position.x as u16 - x_padding as u16+x_offset as u16).clamp(0, width as u16),
-                                                                           (position.y as u16 - y_padding as u16+y_offset as u16).clamp(0, height as u16)
+                                                                           ((position.x as i16 - x_padding as i16+x_offset as i16) as u16).clamp(0, width as u16),
+                                                                           ((position.y as i16 - y_padding as i16+y_offset as i16) as u16).clamp(0, height as u16)
                                                     ).unwrap();
                                                     //dbg!(position.x as u16-x_padding as u16, position.y as u16-y_padding as u16);
                                                 }
@@ -631,8 +638,8 @@ fn main() -> Result<(), Error> {
                                                 //dbg!((((position.x as f32 - x_padding as f32)/ scale_factor) as u16).clamp(0,width as u16), (((position.y as f32 - y_padding as f32)/ scale_factor) as u16).clamp(0,height as u16));
                                             } else {
                                                 vnc.send_pointer_event(0x01,
-                                                                       (position.x as u16 - x_padding as u16+x_offset as u16).clamp(0, width as u16),
-                                                                       (position.y as u16 - y_padding as u16+y_offset as u16).clamp(0, height as u16)
+                                                                       ((position.x as i16 - x_padding as i16+x_offset as i16) as u16).clamp(0, width as u16),
+                                                                       ((position.y as i16 - y_padding as i16+y_offset as i16) as u16).clamp(0, height as u16)
                                                 ).unwrap();
                                                 finger_down_count = Instant::now();
                                                 //dbg!(position.x as u16-x_padding as u16,position.y as u16-y_padding as u16);
@@ -650,14 +657,14 @@ fn main() -> Result<(), Error> {
                                             } else if is_swipe {
 
                                                 vnc.send_pointer_event(0x00,
-                                                                       (position.x as u16 - x_padding as u16+x_offset as u16).clamp(0, width as u16),
-                                                                       (position.y as u16 - y_padding as u16+y_offset as u16).clamp(0, height as u16)
+                                                                       ((position.x as i16 - x_padding as i16+x_offset as i16) as u16).clamp(0, width as u16),
+                                                                       ((position.y as i16 - y_padding as i16+y_offset as i16) as u16).clamp(0, height as u16)
                                                 ).unwrap();
 
                                             } else {
                                                 vnc.send_pointer_event(0x01,
-                                                                       (position.x as u16 - x_padding as u16+x_offset as u16).clamp(0, width as u16),
-                                                                       (position.y as u16 - y_padding as u16+y_offset as u16).clamp(0, height as u16)
+                                                                       ((position.x as i16 - x_padding as i16+x_offset as i16) as u16).clamp(0, width as u16),
+                                                                       ((position.y as i16 - y_padding as i16+y_offset as i16) as u16).clamp(0, height as u16)
                                                 ).unwrap();
                                                 //dbg!(position.x as u16-x_padding as u16, position.y as u16-y_padding as u16)
                                             }
