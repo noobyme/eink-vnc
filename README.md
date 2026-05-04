@@ -7,7 +7,7 @@ I am heavily assisted by AI.
 - I have fixed ZRLE DroidVNC NG issues using Claude AI, mainly 2 issues it seems, the original commit did not have an issue with zrle droidvnc unless it was a debug compile, in which case it would crash after briefly appearing to work due to it being too slow, apparently. Idk for sure I asked claude to help me. The latest commit however does have an issue, zrle droidvnc doesnt work at all. The compiled file provided by anchovy is the oldest commit one, but you cannot rotate the screen with it. The changes are claude gave me are:
   - zrle.rs adding this arm (false, 17..=127) to zrle decode fn,
   - changing copy_indexed fn to return result,
-  - and after some testing confirmed the true error which claude is correct in identifying '&& format.depth <= 24' condition in decode fn for         32bpp, as depth is 32 not 24. 
+  - and after some testing confirmed the true error which claude is correct in identifying '&& format.depth <= 24' condition in decode fn for         32bpp, as depth is 32 not 24. Every other change seems unnecessary, this and the request update seem to be the main cause of issues
   - main.rs:forcing the colour format to 8bpp, as the oldest version did, call vnc.request_update only at end of each frame, instead of each          event, apparently this combined with debug mode can cause server to close connection. 
 - I have changed rotation default to use plato's function
 - I have added a contingency device detection using /mnt/onboard/.kobo/version instead of using environment variables because starting the tool over ssh does not pass those values. 
