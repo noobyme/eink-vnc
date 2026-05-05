@@ -59,11 +59,55 @@ const POWER_INPUTS: [&str; 3] = ["/dev/input/by-path/platform-bd71828-pwrkey.6.a
     "/dev/input/by-path/platform-bd71828-pwrkey.4.auto-event",
     "/dev/input/by-path/platform-bd71828-pwrkey-event"];
 
+// const FORMAT_8_BIT: PixelFormat = PixelFormat {
+//     bits_per_pixel: bits_format,
+//     depth: depth,
+//     big_endian: false,
+//     true_colour: true,
+//     red_max: 7,
+//     green_max: 7,
+//     blue_max: 3,
+//     red_shift:0,
+//     green_shift:3,
+//     blue_shift:6, };
+// const FORMAT_16_BIT: PixelFormat = PixelFormat {
+//     bits_per_pixel: bits_format,
+//     depth: depth,
+//     big_endian: false,
+//     true_colour: true,
+//     red_max: 15,
+//     green_max: 15,
+//     blue_max: 15,
+//     red_shift:0,
+//     green_shift:4,
+//     blue_shift:8, };
+// const FORMAT_24_BIT: PixelFormat = PixelFormat {
+//     bits_per_pixel: bits_format,
+//     depth: depth,
+//     big_endian: false,
+//     true_colour: true,
+//     red_max: 63,
+//     green_max: 63,
+//     blue_max: 63,
+//     red_shift:0,
+//     green_shift:6,
+//     blue_shift:12, };
+// const FORMAT_32_BIT: PixelFormat = PixelFormat {
+//     bits_per_pixel: bits_format,
+//     depth: depth,
+//     big_endian: false,
+//     true_colour: true,
+//     red_max: 255,
+//     green_max: 255,
+//     blue_max: 255,
+//     red_shift:0,
+//     green_shift:8,
+//     blue_shift:16, };
+
 #[repr(align(256))]
 pub struct PostProcBin {
     data: [u8; 256],
 }
-
 
 fn main() -> Result<(), Error> {
     env_logger::init();
@@ -178,6 +222,12 @@ fn main() -> Result<(), Error> {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("DEPTH")
+                .help("Choose colour depth")
+                .long("depth")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("BLUE_NOISE")
                 .help("Blue noise dithering for 1bit output")
                 .long("blue_noise")
@@ -189,8 +239,45 @@ fn main() -> Result<(), Error> {
         )
         .arg(
             Arg::with_name("RED_SHIFT")
-                .help("If have colour inaccuracy, switch red shift and blue shift")
+                .help("")
                 .long("red_shift")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("GREEN_SHIFT")
+                .help("")
+                .long("green_shift")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("BLUE_SHIFT")
+                .help("")
+                .long("blue_shift")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("RED_MAX")
+                .help("")
+                .long("red_max")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("GREEN_MAX")
+                .help("")
+                .long("green_max")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("BLUE_MAX")
+                .help("")
+                .long("blue_max")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("ENCODING")
+                .help("Choose encoding")
+                .long("encoding")
+                .takes_value(true),
         )
             .get_matches();
 
@@ -211,11 +298,17 @@ fn main() -> Result<(), Error> {
     let set_monochrome = value_t!(matches.value_of("SET_MONOCHROME"), bool).unwrap_or(false);
     let refresh = value_t!(matches.value_of("FULL_REFRESH"), u32).unwrap_or(500);
     let fps = value_t!(matches.value_of("FPS"), f32).unwrap_or(30.0);
-    let bits_format = value_t!(matches.value_of("BPP"), u8).unwrap_or(8);
+    let bits_format = value_t!(matches.value_of("BPP"), u8).unwrap_or(32);
+    let depth = value_t!(matches.value_of("DEPTH"), u8).unwrap_or(32);
     let blue_noise = matches.is_present("BLUE_NOISE");
     let is_swipe = matches.is_present("PAN");
-    let red_shift = matches.is_present("RED_SHIFT");
-
+    let red_shift = value_t!(matches.value_of("RED_SHIFT"), u8).unwrap_or(16);
+    let green_shift = value_t!(matches.value_of("GREEN_SHIFT"), u8).unwrap_or(8);
+    let blue_shift = value_t!(matches.value_of("BLUE_SHIFT"), u8).unwrap_or(0);
+    let red_max = value_t!(matches.value_of("RED_MAX"), u16).unwrap_or(255);
+    let green_max = value_t!(matches.value_of("GREEN_MAX"), u16).unwrap_or(255);
+    let blue_max = value_t!(matches.value_of("BLUE_MAX"), u16).unwrap_or(255);
+    let encoding = value_t!(matches.value_of("ENCODING"), u8).unwrap_or(0);
 
     info!("connecting to {}:{}", host, port);
     let stream = match std::net::TcpStream::connect((host, port)) {
@@ -265,18 +358,18 @@ fn main() -> Result<(), Error> {
             std::process::exit(1)
         }
     };
-    let mut fb_red_index = 0;
+    // let mut fb_red_index = 0;
     #[cfg(feature = "eink_device")]
     let mut fb: Box<dyn Framebuffer> = if CURRENT_DEVICE.mark() != 8 {
 
         let raw_fb = KoboFramebuffer1::new(FB_DEVICE).context("can't create framebuffer").unwrap();
-        fb_red_index = if raw_fb.var_info.red.offset > 0 && !red_shift { 2 } else { 0 };
+        // fb_red_index = if raw_fb.var_info.red.offset > 0 { 2 } else { 0 };
         Box::new(raw_fb)
 
     } else {
 
         let raw_fb = KoboFramebuffer2::new(FB_DEVICE).context("can't create framebuffer").unwrap();
-        fb_red_index = if raw_fb.var_info.red.offset > 0 && !red_shift { 2 } else { 0 };
+        // fb_red_index = if raw_fb.var_info.red.offset > 0 { 2 } else { 0 };
         Box::new(raw_fb)
 
     };
@@ -289,41 +382,25 @@ fn main() -> Result<(), Error> {
         height
     );
 
-    let SD_COLOR_FORMAT: PixelFormat = PixelFormat {
+    let mut SD_COLOR_FORMAT: PixelFormat = PixelFormat {
         bits_per_pixel: bits_format,
-        depth: bits_format,
+        depth: depth,
         big_endian: false,
         true_colour: true,
-        red_max: 255,
-        green_max: 255,
-        blue_max: 255,
-        red_shift:fb_red_index*8,
-        green_shift: 8,
-        blue_shift:(2-fb_red_index)*8,
+        red_max: red_max,
+        green_max: green_max,
+        blue_max: blue_max,
+        red_shift:red_shift,       //fb_red_index*8,
+        green_shift:green_shift,  //8,
+        blue_shift:blue_shift,   //(2-fb_red_index)*8,
     };
-    // dbg!(red_shift,fb_red_index,bits_format, SD_COLOR_FORMAT.red_shift,SD_COLOR_FORMAT.blue_shift);
-    //red shift and blue shift wrong thus color off... depth is not
-    //og release only sampled red too... but it depends on bpp?
-    //it depends on server it seems
-    // const SD_COLOR_FORMAT: PixelFormat = PixelFormat {
-    //     bits_per_pixel: 32,
-    //     depth: 32,
-    //     big_endian: false,
-    //     true_colour: true,
-    //     red_max: 255,
-    //     green_max: 255,
-    //     blue_max: 255,
-    //     red_shift:0,
-    //     green_shift: 8,
-    //     blue_shift:16,
-    // };
-
 
     let vnc_format = vnc.format();
     info!("received {:?}", vnc_format);
-
     vnc.set_format(SD_COLOR_FORMAT).unwrap();
-    info!("enforced {:?}", SD_COLOR_FORMAT);
+    info!("request {:?}", SD_COLOR_FORMAT);
+    let vnc_format = vnc.format();
+    info!("received {:?}", vnc_format);
 
     vnc.set_encodings(&[Encoding::CopyRect, Encoding::Zrle])
         .unwrap();
