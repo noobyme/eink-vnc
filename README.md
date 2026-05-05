@@ -73,7 +73,14 @@ Available options:
 - set_monochrome:unsure exactly wat it do, plato function
 - refresh:how often to do full refresh
 - fps: Decimal value, 30.0 or 0.5 etc
-- bits_format: 8, or 32. 8 default. It would seem most servers will only give 32 bit...
+- bits_format: 8, or 32. 8 default. It would seem most servers will only give 32 bit... woops no i made a mistake of not updating the received format, you can request 8 bit
+- depth
+- red_shift
+- green_shift
+- blue_shift
+- red_max
+- green_max
+- blue_max
 - blue_noise: For A2/DU mode, use dithering to produce grayscale
 - pan:disable click drag
 
